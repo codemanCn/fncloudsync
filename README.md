@@ -50,14 +50,20 @@ Expected response:
 Implemented:
 - `GET /healthz`
 - `POST/GET/GET{id}/PUT/DELETE /api/v1/connections`
+- `POST /api/v1/connections/{id}/test`
 - `POST/GET/GET{id}/PUT/DELETE /api/v1/tasks`
+- `POST /api/v1/tasks/{id}/start`
+- `POST /api/v1/tasks/{id}/pause`
+- `POST /api/v1/tasks/{id}/stop`
 - SQLite bootstrap and migrations for `connections` and `tasks`
 - Password-at-rest encryption before connection persistence
 - Connection delete protection when tasks still reference the connection
 - Router-to-SQLite integration tests for the control plane
+- Minimal WebDAV capability probe via `OPTIONS` + `PROPFIND`
+- Upload-direction task start now performs a one-time local-to-WebDAV baseline sync
+- Download-direction task start now performs a one-time WebDAV-to-local baseline sync
+- Bidirectional task start now performs a conservative baseline sync in both directions
 
 Not implemented yet:
-- connection test endpoint
-- task lifecycle execution
-- WebDAV connector
-- sync engine, watcher, scheduler, metrics, frontend
+- task lifecycle background execution
+- watcher, scheduler, runtime recovery, metrics, frontend
