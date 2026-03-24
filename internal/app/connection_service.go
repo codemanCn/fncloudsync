@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"github.com/xiaoxuesen/fn-cloudsync/internal/connector/webdav"
 	appcrypto "github.com/xiaoxuesen/fn-cloudsync/internal/crypto"
 	"github.com/xiaoxuesen/fn-cloudsync/internal/domain"
 )
@@ -21,6 +23,11 @@ type connectionRepository interface {
 type ConnectionService struct {
 	repo    connectionRepository
 	secrets *appcrypto.SecretManager
+	prober  connectionProber
+}
+
+type connectionProber interface {
+	Probe(context.Context, domain.Connection, string) (domain.ConnectionCapabilities, error)
 }
 
 func NewConnectionService(repo connectionRepository, secrets *appcrypto.SecretManager) (*ConnectionService, error) {
@@ -34,7 +41,12 @@ func NewConnectionService(repo connectionRepository, secrets *appcrypto.SecretMa
 	return &ConnectionService{
 		repo:    repo,
 		secrets: secrets,
+		prober:  webdav.NewClient(),
 	}, nil
+}
+
+func (s *ConnectionService) SetProber(prober connectionProber) {
+	s.prober = prober
 }
 
 func (s *ConnectionService) Create(ctx context.Context, connection domain.Connection, plaintextPassword string) (domain.Connection, error) {
@@ -132,4 +144,37 @@ func (s *ConnectionService) Update(ctx context.Context, connection domain.Connec
 	}
 
 	return connection, nil
+}
+
+func (s *ConnectionService) TestConnection(ctx context.Context, id string) (domain.ConnectionTestResult, error) {
+	connection, err := s.GetByID(ctx, id)
+	if err != nil {
+		return domain.ConnectionTestResult{}, err
+	}
+
+	password, err := s.secrets.DecryptString(connection.PasswordCiphertext)
+	if err != nil {
+		return domain.ConnectionTestResult{}, err
+	}
+
+	capabilities, err := s.prober.Probe(ctx, connection, password)
+	if err != nil {
+		return domain.ConnectionTestResult{}, err
+	}
+
+	raw, err := json.Marshal(capabilities)
+	if err != nil {
+		return domain.ConnectionTestResult{}, err
+	}
+
+	connection.CapabilitiesJSON = string(raw)
+	connection.UpdatedAt = time.Now().UTC()
+	if _, err := s.Update(ctx, connection, ""); err != nil {
+		return domain.ConnectionTestResult{}, err
+	}
+
+	return domain.ConnectionTestResult{
+		Success:      true,
+		Capabilities: capabilities,
+	}, nil
 }

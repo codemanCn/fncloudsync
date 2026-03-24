@@ -17,6 +17,7 @@ type connectionCreator interface {
 	GetByID(context.Context, string) (domain.Connection, error)
 	Update(context.Context, domain.Connection, string) (domain.Connection, error)
 	Delete(context.Context, string) error
+	TestConnection(context.Context, string) (domain.ConnectionTestResult, error)
 }
 
 type createConnectionRequest struct {
@@ -162,6 +163,22 @@ func DeleteConnection(service connectionCreator) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func TestConnection(service connectionCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		result, err := service.TestConnection(r.Context(), chi.URLParam(r, "connectionID"))
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, domain.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			writeError(w, status, err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, result)
 	}
 }
 

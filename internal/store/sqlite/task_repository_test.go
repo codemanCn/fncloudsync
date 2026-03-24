@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -204,4 +205,49 @@ func TestTaskRepositoryHasTasksByConnectionID(t *testing.T) {
 	if !hasTasks {
 		t.Fatal("HasTasksByConnectionID() = false, want true")
 	}
+}
+
+func openTaskScopedDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	db := openMigratedDB(t)
+	connectionRepo := sqlitestore.NewConnectionRepository(db)
+	taskRepo := sqlitestore.NewTaskRepository(db)
+	ctx := context.Background()
+
+	connection := domain.Connection{
+		ID:                 "conn-1",
+		Name:               "primary",
+		Endpoint:           "https://dav.example.com/root",
+		Username:           "alice",
+		PasswordCiphertext: "ciphertext-1",
+		RootPath:           "/",
+		TLSMode:            domain.TLSModeStrict,
+		TimeoutSec:         30,
+		Status:             "active",
+		CreatedAt:          time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+		UpdatedAt:          time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+	}
+	if err := connectionRepo.Create(ctx, connection); err != nil {
+		db.Close()
+		t.Fatalf("Create(connection) error = %v", err)
+	}
+
+	task := domain.Task{
+		ID:           "task-1",
+		Name:         "sync-home",
+		ConnectionID: connection.ID,
+		LocalPath:    "/tmp/local",
+		RemotePath:   "/remote",
+		Direction:    domain.TaskDirectionUpload,
+		Status:       domain.TaskStatusCreated,
+		CreatedAt:    time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+		UpdatedAt:    time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+	}
+	if err := taskRepo.Create(ctx, task); err != nil {
+		db.Close()
+		t.Fatalf("Create(task) error = %v", err)
+	}
+
+	return db
 }

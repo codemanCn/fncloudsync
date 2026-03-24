@@ -15,6 +15,7 @@ type connectionCreator interface {
 	GetByID(context.Context, string) (domain.Connection, error)
 	Update(context.Context, domain.Connection, string) (domain.Connection, error)
 	Delete(context.Context, string) error
+	TestConnection(context.Context, string) (domain.ConnectionTestResult, error)
 }
 
 type taskCreator interface {
@@ -23,6 +24,9 @@ type taskCreator interface {
 	GetByID(context.Context, string) (domain.Task, error)
 	Update(context.Context, domain.Task) (domain.Task, error)
 	Delete(context.Context, string) error
+	Start(context.Context, string) (domain.Task, error)
+	Pause(context.Context, string) (domain.Task, error)
+	Stop(context.Context, string) (domain.Task, error)
 }
 
 func NewRouter(connectionService connectionCreator, taskService taskCreator) http.Handler {
@@ -37,6 +41,7 @@ func NewRouter(connectionService connectionCreator, taskService taskCreator) htt
 			r.Get("/connections/{connectionID}", handlers.GetConnection(connectionService))
 			r.Put("/connections/{connectionID}", handlers.UpdateConnection(connectionService))
 			r.Delete("/connections/{connectionID}", handlers.DeleteConnection(connectionService))
+			r.Post("/connections/{connectionID}/test", handlers.TestConnection(connectionService))
 		}
 		if taskService != nil {
 			r.Post("/tasks", handlers.CreateTask(taskService))
@@ -44,6 +49,9 @@ func NewRouter(connectionService connectionCreator, taskService taskCreator) htt
 			r.Get("/tasks/{taskID}", handlers.GetTask(taskService))
 			r.Put("/tasks/{taskID}", handlers.UpdateTask(taskService))
 			r.Delete("/tasks/{taskID}", handlers.DeleteTask(taskService))
+			r.Post("/tasks/{taskID}/start", handlers.StartTask(taskService))
+			r.Post("/tasks/{taskID}/pause", handlers.PauseTask(taskService))
+			r.Post("/tasks/{taskID}/stop", handlers.StopTask(taskService))
 		}
 	})
 

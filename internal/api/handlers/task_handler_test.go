@@ -145,6 +145,54 @@ func TestDeleteTaskReturnsNoContent(t *testing.T) {
 	}
 }
 
+func TestStartTaskReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		startResult: domain.Task{ID: "task-1", Status: domain.TaskStatusRunning},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-1/start", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestPauseTaskReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		pauseResult: domain.Task{ID: "task-1", Status: domain.TaskStatusPaused},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-1/pause", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestStopTaskReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		stopResult: domain.Task{ID: "task-1", Status: domain.TaskStatusStopped},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-1/stop", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
 type stubTaskService struct {
 	createResult domain.Task
 	createErr    error
@@ -155,6 +203,12 @@ type stubTaskService struct {
 	updateResult domain.Task
 	updateErr    error
 	deleteErr    error
+	startResult  domain.Task
+	startErr     error
+	pauseResult  domain.Task
+	pauseErr     error
+	stopResult   domain.Task
+	stopErr      error
 }
 
 func (s *stubTaskService) Create(_ context.Context, _ domain.Task) (domain.Task, error) {
@@ -178,4 +232,16 @@ func (s *stubTaskService) Update(_ context.Context, task domain.Task) (domain.Ta
 
 func (s *stubTaskService) Delete(_ context.Context, _ string) error {
 	return s.deleteErr
+}
+
+func (s *stubTaskService) Start(_ context.Context, _ string) (domain.Task, error) {
+	return s.startResult, s.startErr
+}
+
+func (s *stubTaskService) Pause(_ context.Context, _ string) (domain.Task, error) {
+	return s.pauseResult, s.pauseErr
+}
+
+func (s *stubTaskService) Stop(_ context.Context, _ string) (domain.Task, error) {
+	return s.stopResult, s.stopErr
 }

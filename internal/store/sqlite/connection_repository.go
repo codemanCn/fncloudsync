@@ -19,8 +19,8 @@ func NewConnectionRepository(db *sql.DB) *ConnectionRepository {
 func (r *ConnectionRepository) Create(ctx context.Context, connection domain.Connection) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO connections (
-			id, name, endpoint, username, password_ciphertext, root_path, tls_mode, timeout_sec, status, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			id, name, endpoint, username, password_ciphertext, root_path, tls_mode, timeout_sec, capabilities_json, status, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		connection.ID,
 		connection.Name,
@@ -30,6 +30,7 @@ func (r *ConnectionRepository) Create(ctx context.Context, connection domain.Con
 		connection.RootPath,
 		connection.TLSMode,
 		connection.TimeoutSec,
+		connection.CapabilitiesJSON,
 		connection.Status,
 		connection.CreatedAt.UTC().Format(timestampLayout),
 		connection.UpdatedAt.UTC().Format(timestampLayout),
@@ -39,7 +40,7 @@ func (r *ConnectionRepository) Create(ctx context.Context, connection domain.Con
 
 func (r *ConnectionRepository) GetByID(ctx context.Context, id string) (domain.Connection, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, name, endpoint, username, password_ciphertext, root_path, tls_mode, timeout_sec, status, created_at, updated_at
+		SELECT id, name, endpoint, username, password_ciphertext, root_path, tls_mode, timeout_sec, capabilities_json, status, created_at, updated_at
 		FROM connections
 		WHERE id = ?
 	`, id)
@@ -53,7 +54,7 @@ func (r *ConnectionRepository) GetByID(ctx context.Context, id string) (domain.C
 
 func (r *ConnectionRepository) List(ctx context.Context) ([]domain.Connection, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, endpoint, username, password_ciphertext, root_path, tls_mode, timeout_sec, status, created_at, updated_at
+		SELECT id, name, endpoint, username, password_ciphertext, root_path, tls_mode, timeout_sec, capabilities_json, status, created_at, updated_at
 		FROM connections
 		ORDER BY created_at DESC, id DESC
 	`)
@@ -77,7 +78,7 @@ func (r *ConnectionRepository) List(ctx context.Context) ([]domain.Connection, e
 func (r *ConnectionRepository) Update(ctx context.Context, connection domain.Connection) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE connections
-		SET name = ?, endpoint = ?, username = ?, password_ciphertext = ?, root_path = ?, tls_mode = ?, timeout_sec = ?, status = ?, updated_at = ?
+		SET name = ?, endpoint = ?, username = ?, password_ciphertext = ?, root_path = ?, tls_mode = ?, timeout_sec = ?, capabilities_json = ?, status = ?, updated_at = ?
 		WHERE id = ?
 	`,
 		connection.Name,
@@ -87,6 +88,7 @@ func (r *ConnectionRepository) Update(ctx context.Context, connection domain.Con
 		connection.RootPath,
 		connection.TLSMode,
 		connection.TimeoutSec,
+		connection.CapabilitiesJSON,
 		connection.Status,
 		connection.UpdatedAt.UTC().Format(timestampLayout),
 		connection.ID,
@@ -151,6 +153,7 @@ func scanConnection(s scanner) (domain.Connection, error) {
 		&connection.RootPath,
 		&tlsMode,
 		&connection.TimeoutSec,
+		&connection.CapabilitiesJSON,
 		&connection.Status,
 		&createdAt,
 		&updatedAt,

@@ -45,6 +45,50 @@ type Task struct {
 	UpdatedAt          time.Time
 }
 
+type TaskRuntimeState struct {
+	TaskID           string
+	Phase            string
+	LastLocalScanAt  time.Time
+	LastRemoteScanAt time.Time
+	LastReconcileAt  time.Time
+	LastSuccessAt    time.Time
+	BackoffUntil     time.Time
+	RetryStreak      int
+	LastError        string
+	UpdatedAt        time.Time
+}
+
+type OperationQueueItem struct {
+	ID            string
+	TaskID        string
+	OpType        string
+	TargetPath    string
+	SrcSide       string
+	Reason        string
+	PayloadJSON   string
+	Priority      int
+	Status        string
+	AttemptCount  int
+	NextAttemptAt time.Time
+	LastError     string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type FailureRecord struct {
+	ID            string
+	TaskID        string
+	Path          string
+	OpType        string
+	ErrorCode     string
+	ErrorMessage  string
+	Retryable     bool
+	FirstFailedAt time.Time
+	LastFailedAt  time.Time
+	AttemptCount  int
+	ResolvedAt    time.Time
+}
+
 func (t *Task) ApplyDefaults() {
 	if t.Status == "" {
 		t.Status = TaskStatusCreated

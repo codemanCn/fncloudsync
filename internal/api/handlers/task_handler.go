@@ -17,6 +17,9 @@ type taskCreator interface {
 	GetByID(context.Context, string) (domain.Task, error)
 	Update(context.Context, domain.Task) (domain.Task, error)
 	Delete(context.Context, string) error
+	Start(context.Context, string) (domain.Task, error)
+	Pause(context.Context, string) (domain.Task, error)
+	Stop(context.Context, string) (domain.Task, error)
 }
 
 type createTaskRequest struct {
@@ -150,6 +153,39 @@ func DeleteTask(service taskCreator) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func StartTask(service taskCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		task, err := service.Start(r.Context(), chi.URLParam(r, "taskID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, toTaskResponse(task))
+	}
+}
+
+func PauseTask(service taskCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		task, err := service.Pause(r.Context(), chi.URLParam(r, "taskID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, toTaskResponse(task))
+	}
+}
+
+func StopTask(service taskCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		task, err := service.Stop(r.Context(), chi.URLParam(r, "taskID"))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, toTaskResponse(task))
 	}
 }
 

@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 )
 
 var migrations = []string{
@@ -21,6 +22,7 @@ var migrations = []string{
 		root_path TEXT NOT NULL DEFAULT '',
 		tls_mode TEXT NOT NULL DEFAULT 'strict',
 		timeout_sec INTEGER NOT NULL DEFAULT 30,
+		capabilities_json TEXT NOT NULL DEFAULT '',
 		status TEXT NOT NULL DEFAULT 'active',
 		created_at TEXT NOT NULL,
 		updated_at TEXT NOT NULL
@@ -50,6 +52,56 @@ var migrations = []string{
 		FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE RESTRICT
 	);
 	`,
+	`
+	CREATE TABLE IF NOT EXISTS task_runtime_state (
+		task_id TEXT PRIMARY KEY,
+		phase TEXT NOT NULL DEFAULT '',
+		last_local_scan_at TEXT NOT NULL DEFAULT '',
+		last_remote_scan_at TEXT NOT NULL DEFAULT '',
+		last_reconcile_at TEXT NOT NULL DEFAULT '',
+		last_success_at TEXT NOT NULL DEFAULT '',
+		backoff_until TEXT NOT NULL DEFAULT '',
+		retry_streak INTEGER NOT NULL DEFAULT 0,
+		last_error TEXT NOT NULL DEFAULT '',
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+	);
+	`,
+	`
+	CREATE TABLE IF NOT EXISTS operation_queue (
+		id TEXT PRIMARY KEY,
+		task_id TEXT NOT NULL,
+		op_type TEXT NOT NULL,
+		target_path TEXT NOT NULL,
+		src_side TEXT NOT NULL DEFAULT '',
+		reason TEXT NOT NULL DEFAULT '',
+		payload_json TEXT NOT NULL DEFAULT '',
+		priority INTEGER NOT NULL DEFAULT 0,
+		status TEXT NOT NULL DEFAULT 'pending',
+		attempt_count INTEGER NOT NULL DEFAULT 0,
+		next_attempt_at TEXT NOT NULL DEFAULT '',
+		last_error TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+	);
+	`,
+	`
+	CREATE TABLE IF NOT EXISTS failure_records (
+		id TEXT PRIMARY KEY,
+		task_id TEXT NOT NULL,
+		path TEXT NOT NULL,
+		op_type TEXT NOT NULL,
+		error_code TEXT NOT NULL DEFAULT '',
+		error_message TEXT NOT NULL DEFAULT '',
+		retryable INTEGER NOT NULL DEFAULT 0,
+		first_failed_at TEXT NOT NULL,
+		last_failed_at TEXT NOT NULL,
+		attempt_count INTEGER NOT NULL DEFAULT 1,
+		resolved_at TEXT NOT NULL DEFAULT '',
+		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+	);
+	`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -65,5 +117,42 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
+	exists, err := columnExists(ctx, tx, "connections", "capabilities_json")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if !exists {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE connections ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT ''`); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
 	return tx.Commit()
+}
+
+func columnExists(ctx context.Context, tx *sql.Tx, tableName, columnName string) (bool, error) {
+	rows, err := tx.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", tableName))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var dataType string
+		var notNull int
+		var defaultValue sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if name == columnName {
+			return true, nil
+		}
+	}
+
+	return false, rows.Err()
 }

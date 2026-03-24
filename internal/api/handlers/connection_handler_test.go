@@ -155,6 +155,28 @@ func TestDeleteConnectionReturnsNoContent(t *testing.T) {
 	}
 }
 
+func TestTestConnectionReturnsCapabilities(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(&stubConnectionService{
+		testResult: domain.ConnectionTestResult{
+			Success: true,
+			Capabilities: domain.ConnectionCapabilities{
+				SupportsETag: true,
+				SupportsMove: true,
+			},
+		},
+	}, nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/connections/conn-1/test", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
 type stubConnectionService struct {
 	createResult domain.Connection
 	createErr    error
@@ -165,6 +187,8 @@ type stubConnectionService struct {
 	updateResult domain.Connection
 	updateErr    error
 	deleteErr    error
+	testResult   domain.ConnectionTestResult
+	testErr      error
 }
 
 func (s *stubConnectionService) Create(_ context.Context, _ domain.Connection, _ string) (domain.Connection, error) {
@@ -188,4 +212,8 @@ func (s *stubConnectionService) Update(_ context.Context, connection domain.Conn
 
 func (s *stubConnectionService) Delete(_ context.Context, _ string) error {
 	return s.deleteErr
+}
+
+func (s *stubConnectionService) TestConnection(_ context.Context, _ string) (domain.ConnectionTestResult, error) {
+	return s.testResult, s.testErr
 }

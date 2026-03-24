@@ -261,6 +261,57 @@ func TestConnectionServiceCreateValidatesInput(t *testing.T) {
 	}
 }
 
+func TestConnectionServiceTestConnectionPersistsCapabilities(t *testing.T) {
+	t.Parallel()
+
+	repo := &stubConnectionRepository{
+		getResult: domain.Connection{
+			ID:                 "conn-1",
+			Name:               "primary",
+			Endpoint:           "https://dav.example.com/root",
+			Username:           "alice",
+			PasswordCiphertext: "ciphertext",
+			RootPath:           "/",
+			TLSMode:            domain.TLSModeStrict,
+			TimeoutSec:         30,
+			Status:             "active",
+			CreatedAt:          time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+			UpdatedAt:          time.Date(2026, 3, 24, 10, 0, 0, 0, time.UTC),
+		},
+	}
+	secrets, err := appcrypto.NewSecretManager("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("NewSecretManager() error = %v", err)
+	}
+	repo.getResult.PasswordCiphertext, err = secrets.EncryptString("top-secret")
+	if err != nil {
+		t.Fatalf("EncryptString() error = %v", err)
+	}
+
+	service, err := app.NewConnectionService(repo, secrets)
+	if err != nil {
+		t.Fatalf("NewConnectionService() error = %v", err)
+	}
+	service.SetProber(stubConnectionProber{
+		capabilities: domain.ConnectionCapabilities{
+			SupportsETag: true,
+			SupportsMove: true,
+		},
+	})
+
+	result, err := service.TestConnection(context.Background(), "conn-1")
+	if err != nil {
+		t.Fatalf("TestConnection() error = %v", err)
+	}
+
+	if !result.Capabilities.SupportsETag {
+		t.Fatal("SupportsETag = false, want true")
+	}
+	if repo.lastUpdated.CapabilitiesJSON == "" {
+		t.Fatal("CapabilitiesJSON not persisted")
+	}
+}
+
 type stubConnectionRepository struct {
 	lastCreated domain.Connection
 	lastUpdated domain.Connection
@@ -270,6 +321,15 @@ type stubConnectionRepository struct {
 	listResult  []domain.Connection
 	listErr     error
 	hasTasks    bool
+}
+
+type stubConnectionProber struct {
+	capabilities domain.ConnectionCapabilities
+	err          error
+}
+
+func (s stubConnectionProber) Probe(_ context.Context, _ domain.Connection, _ string) (domain.ConnectionCapabilities, error) {
+	return s.capabilities, s.err
 }
 
 func (s *stubConnectionRepository) Create(_ context.Context, connection domain.Connection) error {

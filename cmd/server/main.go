@@ -12,9 +12,12 @@ import (
 	"github.com/xiaoxuesen/fn-cloudsync/internal/api"
 	"github.com/xiaoxuesen/fn-cloudsync/internal/app"
 	"github.com/xiaoxuesen/fn-cloudsync/internal/config"
+	"github.com/xiaoxuesen/fn-cloudsync/internal/connector/webdav"
 	appcrypto "github.com/xiaoxuesen/fn-cloudsync/internal/crypto"
 	"github.com/xiaoxuesen/fn-cloudsync/internal/obs"
+	"github.com/xiaoxuesen/fn-cloudsync/internal/scheduler"
 	sqlitestore "github.com/xiaoxuesen/fn-cloudsync/internal/store/sqlite"
+	appsync "github.com/xiaoxuesen/fn-cloudsync/internal/sync"
 )
 
 func main() {
@@ -51,6 +54,14 @@ func run() error {
 		return err
 	}
 	taskService := app.NewTaskService(sqlitestore.NewTaskRepository(db))
+	taskService.SetConnectionRepository(sqlitestore.NewConnectionRepository(db))
+	taskService.SetSecrets(secrets)
+	taskService.SetBaselineRunner(appsync.NewBaselineRunner(webdav.NewClient()))
+	taskService.SetRuntimeRepository(sqlitestore.NewTaskRuntimeRepository(db))
+	taskService.SetFailureRepository(sqlitestore.NewFailureRecordRepository(db))
+	taskService.SetOperationQueueRepository(sqlitestore.NewOperationQueueRepository(db))
+
+	bgScheduler := scheduler.New(taskService, sqlitestore.NewTaskRuntimeRepository(db), time.Second)
 
 	server := &http.Server{
 		Addr:    cfg.Addr,
@@ -59,6 +70,10 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	go func() {
+		bgScheduler.Run(ctx)
+	}()
 
 	go func() {
 		logger.Printf("listening on %s", cfg.Addr)
