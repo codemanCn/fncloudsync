@@ -1,5 +1,19 @@
 # Download And Runtime Foundation Implementation Plan
 
+## Status
+
+Completed on 2026-03-24, then extended beyond the original scope.
+
+Delivered scope:
+- download and bidirectional baseline sync
+- runtime state persistence
+- start execution runtime tracking
+
+Additional work completed after this plan:
+- file index and conservative tombstone-driven bidirectional delete handling
+- scheduler, watcher, queue consumption, action planner/executor
+- failure list, batch retry, retry-by-failure-id, runtime aggregation APIs
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend task execution from one-time upload baseline to download and bidirectional baseline sync, while laying the first runtime-state persistence foundation for later continuous scheduling and recovery.

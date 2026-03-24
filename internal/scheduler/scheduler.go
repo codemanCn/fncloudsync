@@ -11,6 +11,7 @@ import (
 type taskRunner interface {
 	List(context.Context) ([]domain.Task, error)
 	ExecuteRunningTask(context.Context, string) error
+	ExecuteQueueOperation(context.Context, domain.OperationQueueItem) error
 }
 
 type runtimeReader interface {
@@ -92,7 +93,13 @@ func (s *Scheduler) Tick(ctx context.Context) {
 		if _, ok := executed[op.TaskID]; ok {
 			continue
 		}
-		if err := s.tasks.ExecuteRunningTask(ctx, op.TaskID); err != nil {
+		var err error
+		if isActionOp(op.OpType) {
+			err = s.tasks.ExecuteQueueOperation(ctx, op)
+		} else {
+			err = s.tasks.ExecuteRunningTask(ctx, op.TaskID)
+		}
+		if err != nil {
 			op.AttemptCount++
 			op.LastError = err.Error()
 			op.NextAttemptAt = now.Add(nextBackoff(op.AttemptCount))
@@ -101,6 +108,23 @@ func (s *Scheduler) Tick(ctx context.Context) {
 			continue
 		}
 		_ = s.queue.Dequeue(ctx, op.ID)
+	}
+}
+
+func isActionOp(opType string) bool {
+	switch domain.SyncActionType(opType) {
+	case domain.SyncActionCreateDirLocal,
+		domain.SyncActionCreateDirRemote,
+		domain.SyncActionUploadFile,
+		domain.SyncActionDownloadFile,
+		domain.SyncActionDeleteLocal,
+		domain.SyncActionDeleteRemote,
+		domain.SyncActionMoveConflictLocal,
+		domain.SyncActionMoveConflictRemote,
+		domain.SyncActionRefreshMetadata:
+		return true
+	default:
+		return false
 	}
 }
 

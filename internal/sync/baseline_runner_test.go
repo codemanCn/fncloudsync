@@ -138,11 +138,244 @@ func TestBidirectionalBaselineSyncUploadsLocalAndDownloadsRemote(t *testing.T) {
 	}
 }
 
+func TestUploadBaselineSyncMirrorDeletesRemoteExtras(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "keep.txt"), []byte("keep"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(keep) error = %v", err)
+	}
+
+	connector := &stubRemoteFS{
+		listings: map[string][]domain.RemoteEntry{
+			"/remote": {
+				{Path: "/remote/keep.txt", Exists: true},
+				{Path: "/remote/old.txt", Exists: true},
+			},
+		},
+	}
+	runner := appsync.NewBaselineRunner(connector)
+
+	err := runner.UploadOnce(context.Background(), domain.Task{
+		LocalPath:    root,
+		RemotePath:   "/remote",
+		DeletePolicy: "mirror",
+	}, domain.Connection{}, "top-secret")
+	if err != nil {
+		t.Fatalf("UploadOnce() error = %v", err)
+	}
+
+	if len(connector.deletes) != 1 || connector.deletes[0] != "/remote/old.txt" {
+		t.Fatalf("deletes = %v, want /remote/old.txt", connector.deletes)
+	}
+}
+
+func TestDownloadBaselineSyncMirrorDeletesLocalExtras(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "old.txt"), []byte("stale"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(old) error = %v", err)
+	}
+
+	connector := &stubRemoteFS{
+		listings: map[string][]domain.RemoteEntry{
+			"/remote": {
+				{Path: "/remote/keep.txt", IsDir: false, Exists: true},
+			},
+		},
+		downloads: map[string]string{
+			"/remote/keep.txt": "keep",
+		},
+	}
+	runner := appsync.NewBaselineRunner(connector)
+
+	err := runner.DownloadOnce(context.Background(), domain.Task{
+		LocalPath:    root,
+		RemotePath:   "/remote",
+		DeletePolicy: "mirror",
+	}, domain.Connection{}, "top-secret")
+	if err != nil {
+		t.Fatalf("DownloadOnce() error = %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "old.txt")); !os.IsNotExist(err) {
+		t.Fatalf("old.txt stat error = %v, want not exist", err)
+	}
+}
+
+func TestBidirectionalBaselineSyncPreferRemoteOverwritesConflicts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "shared.txt"), []byte("local"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(shared) error = %v", err)
+	}
+
+	connector := &stubRemoteFS{
+		listings: map[string][]domain.RemoteEntry{
+			"/remote": {
+				{Path: "/remote/shared.txt", IsDir: false, Exists: true},
+			},
+		},
+		downloads: map[string]string{
+			"/remote/shared.txt": "remote",
+		},
+	}
+	runner := appsync.NewBaselineRunner(connector)
+
+	err := runner.RunOnce(context.Background(), domain.Task{
+		LocalPath:      root,
+		RemotePath:     "/remote",
+		Direction:      domain.TaskDirectionBidirectional,
+		ConflictPolicy: "prefer_remote",
+	}, domain.Connection{}, "top-secret")
+	if err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(root, "shared.txt"))
+	if err != nil {
+		t.Fatalf("os.ReadFile(shared) error = %v", err)
+	}
+	if string(body) != "remote" {
+		t.Fatalf("shared.txt = %q, want %q", string(body), "remote")
+	}
+}
+
+func TestBidirectionalBaselineSyncPreferLocalUploadsConflicts(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "shared.txt"), []byte("local"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(shared) error = %v", err)
+	}
+
+	connector := &stubRemoteFS{
+		listings: map[string][]domain.RemoteEntry{
+			"/remote": {
+				{Path: "/remote/shared.txt", IsDir: false, Exists: true},
+			},
+		},
+		downloads: map[string]string{
+			"/remote/shared.txt": "remote",
+		},
+	}
+	runner := appsync.NewBaselineRunner(connector)
+
+	err := runner.RunOnce(context.Background(), domain.Task{
+		LocalPath:      root,
+		RemotePath:     "/remote",
+		Direction:      domain.TaskDirectionBidirectional,
+		ConflictPolicy: "prefer_local",
+	}, domain.Connection{}, "top-secret")
+	if err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+
+	if connector.uploads["/remote/shared.txt"] != "local" {
+		t.Fatalf("uploaded shared conflict = %q, want %q", connector.uploads["/remote/shared.txt"], "local")
+	}
+}
+
+func TestBidirectionalMirrorDeletesRemoteWhenIndexedLocalDeletionDetected(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	indexRepo := &stubFileIndexRepo{
+		items: []domain.FileIndexEntry{
+			{
+				TaskID:       "task-1",
+				RelativePath: "gone.txt",
+				LocalExists:  true,
+				RemoteExists: true,
+				SyncState:    "synced",
+				Version:      1,
+			},
+		},
+	}
+	connector := &stubRemoteFS{
+		listings: map[string][]domain.RemoteEntry{
+			"/remote": {
+				{Path: "/remote/gone.txt", Exists: true},
+			},
+		},
+		downloads: map[string]string{
+			"/remote/gone.txt": "remote",
+		},
+	}
+	runner := appsync.NewBaselineRunner(connector)
+	runner.SetFileIndexRepository(indexRepo)
+
+	err := runner.RunOnce(context.Background(), domain.Task{
+		ID:            "task-1",
+		LocalPath:     root,
+		RemotePath:    "/remote",
+		Direction:     domain.TaskDirectionBidirectional,
+		DeletePolicy:  "mirror",
+		ConflictPolicy:"prefer_local",
+	}, domain.Connection{}, "top-secret")
+	if err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+
+	if len(connector.deletes) != 1 || connector.deletes[0] != "/remote/gone.txt" {
+		t.Fatalf("deletes = %v, want /remote/gone.txt", connector.deletes)
+	}
+}
+
+func TestBidirectionalMirrorDoesNotDeleteWithoutPriorFileIndexEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	connector := &stubRemoteFS{
+		listings: map[string][]domain.RemoteEntry{
+			"/remote": {
+				{Path: "/remote/new-remote.txt", Exists: true},
+			},
+		},
+		downloads: map[string]string{
+			"/remote/new-remote.txt": "remote",
+		},
+	}
+	runner := appsync.NewBaselineRunner(connector)
+	runner.SetFileIndexRepository(&stubFileIndexRepo{})
+
+	err := runner.RunOnce(context.Background(), domain.Task{
+		ID:            "task-1",
+		LocalPath:     root,
+		RemotePath:    "/remote",
+		Direction:     domain.TaskDirectionBidirectional,
+		DeletePolicy:  "mirror",
+		ConflictPolicy:"prefer_local",
+	}, domain.Connection{}, "top-secret")
+	if err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+
+	if len(connector.deletes) != 0 {
+		t.Fatalf("deletes = %v, want none", connector.deletes)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "new-remote.txt"))
+	if err != nil {
+		t.Fatalf("os.ReadFile(new-remote) error = %v", err)
+	}
+	if string(body) != "remote" {
+		t.Fatalf("new-remote.txt = %q, want %q", string(body), "remote")
+	}
+}
+
 type stubRemoteFS struct {
 	mkdirs    []string
 	uploads   map[string]string
 	listings  map[string][]domain.RemoteEntry
 	downloads map[string]string
+	deletes   []string
+}
+
+type stubFileIndexRepo struct {
+	items    []domain.FileIndexEntry
+	upserts  []domain.FileIndexEntry
 }
 
 func (s *stubRemoteFS) MkdirAll(_ context.Context, _ domain.Connection, _ string, targetPath string) error {
@@ -166,4 +399,18 @@ func (s *stubRemoteFS) List(_ context.Context, _ domain.Connection, _ string, ta
 func (s *stubRemoteFS) Download(_ context.Context, _ domain.Connection, _ string, targetPath string) (io.ReadCloser, domain.RemoteEntry, error) {
 	value := s.downloads[targetPath]
 	return io.NopCloser(strings.NewReader(value)), domain.RemoteEntry{Path: targetPath, Exists: true}, nil
+}
+
+func (s *stubRemoteFS) Delete(_ context.Context, _ domain.Connection, _ string, targetPath string, _ bool) error {
+	s.deletes = append(s.deletes, targetPath)
+	return nil
+}
+
+func (s *stubFileIndexRepo) ListByTaskID(_ context.Context, _ string) ([]domain.FileIndexEntry, error) {
+	return append([]domain.FileIndexEntry(nil), s.items...), nil
+}
+
+func (s *stubFileIndexRepo) Upsert(_ context.Context, item domain.FileIndexEntry) error {
+	s.upserts = append(s.upserts, item)
+	return nil
 }

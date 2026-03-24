@@ -193,6 +193,73 @@ func TestStopTaskReturnsOK(t *testing.T) {
 	}
 }
 
+func TestListTaskFailuresReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		failuresResult: []domain.FailureRecord{
+			{ID: "fail-1", TaskID: "task-1", Path: "report.txt", OpType: "UploadFile"},
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/task-1/failures", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestRetryTaskFailuresReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{retryCount: 2})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-1/retry", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestRetryTaskFailureReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{retryByIDCount: 1})
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/task-1/failures/fail-1/retry", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestGetTaskRuntimeReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		runtimeViewResult: domain.TaskRuntimeView{
+			Task: domain.Task{ID: "task-1", Status: domain.TaskStatusRunning},
+			Runtime: domain.TaskRuntimeState{Phase: "idle"},
+			QueueSummary: domain.TaskQueueSummary{Total: 1, Pending: 1},
+			FailureSummary: domain.TaskFailureSummary{Total: 1, Open: 1},
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/task-1/runtime", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
 type stubTaskService struct {
 	createResult domain.Task
 	createErr    error
@@ -209,6 +276,14 @@ type stubTaskService struct {
 	pauseErr     error
 	stopResult   domain.Task
 	stopErr      error
+	failuresResult []domain.FailureRecord
+	failuresErr error
+	retryCount int
+	retryErr error
+	retryByIDCount int
+	retryByIDErr error
+	runtimeViewResult domain.TaskRuntimeView
+	runtimeViewErr error
 }
 
 func (s *stubTaskService) Create(_ context.Context, _ domain.Task) (domain.Task, error) {
@@ -244,4 +319,20 @@ func (s *stubTaskService) Pause(_ context.Context, _ string) (domain.Task, error
 
 func (s *stubTaskService) Stop(_ context.Context, _ string) (domain.Task, error) {
 	return s.stopResult, s.stopErr
+}
+
+func (s *stubTaskService) ListFailures(_ context.Context, _ string) ([]domain.FailureRecord, error) {
+	return s.failuresResult, s.failuresErr
+}
+
+func (s *stubTaskService) RetryFailures(_ context.Context, _ string) (int, error) {
+	return s.retryCount, s.retryErr
+}
+
+func (s *stubTaskService) RetryFailureByID(_ context.Context, _, _ string) (int, error) {
+	return s.retryByIDCount, s.retryByIDErr
+}
+
+func (s *stubTaskService) GetRuntimeView(_ context.Context, _ string) (domain.TaskRuntimeView, error) {
+	return s.runtimeViewResult, s.runtimeViewErr
 }

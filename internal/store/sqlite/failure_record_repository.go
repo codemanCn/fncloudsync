@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/xiaoxuesen/fn-cloudsync/internal/domain"
 )
@@ -105,4 +106,23 @@ func (r *FailureRecordRepository) GetByID(ctx context.Context, id string) (domai
 	record.LastFailedAt = parseOptionalTimestamp(lastFailedAt)
 	record.ResolvedAt = parseOptionalTimestamp(resolvedAt)
 	return record, nil
+}
+
+func (r *FailureRecordRepository) Resolve(ctx context.Context, id string, resolvedAt time.Time) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE failure_records
+		SET resolved_at = ?
+		WHERE id = ?
+	`, formatOptionalTimestamp(resolvedAt), id)
+	if err != nil {
+		return mapSQLError(err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }

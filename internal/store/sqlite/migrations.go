@@ -87,6 +87,31 @@ var migrations = []string{
 	);
 	`,
 	`
+	CREATE TABLE IF NOT EXISTS file_index (
+		id TEXT PRIMARY KEY,
+		task_id TEXT NOT NULL,
+		relative_path TEXT NOT NULL,
+		entry_type TEXT NOT NULL DEFAULT 'file',
+		local_exists INTEGER NOT NULL DEFAULT 0,
+		remote_exists INTEGER NOT NULL DEFAULT 0,
+		local_size INTEGER NOT NULL DEFAULT 0,
+		remote_size INTEGER NOT NULL DEFAULT 0,
+		local_mtime TEXT NOT NULL DEFAULT '',
+		remote_mtime TEXT NOT NULL DEFAULT '',
+		local_file_id TEXT NOT NULL DEFAULT '',
+		remote_etag TEXT NOT NULL DEFAULT '',
+		content_hash TEXT NOT NULL DEFAULT '',
+		last_sync_direction TEXT NOT NULL DEFAULT '',
+		last_sync_at TEXT NOT NULL DEFAULT '',
+		version INTEGER NOT NULL DEFAULT 1,
+		sync_state TEXT NOT NULL DEFAULT '',
+		conflict_flag INTEGER NOT NULL DEFAULT 0,
+		deleted_tombstone INTEGER NOT NULL DEFAULT 0,
+		UNIQUE(task_id, relative_path),
+		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+	);
+	`,
+	`
 	CREATE TABLE IF NOT EXISTS failure_records (
 		id TEXT PRIMARY KEY,
 		task_id TEXT NOT NULL,

@@ -89,6 +89,73 @@ type FailureRecord struct {
 	ResolvedAt    time.Time
 }
 
+type FileIndexEntry struct {
+	ID                string
+	TaskID            string
+	RelativePath      string
+	EntryType         string
+	LocalExists       bool
+	RemoteExists      bool
+	LocalSize         int64
+	RemoteSize        int64
+	LocalMTime        time.Time
+	RemoteMTime       time.Time
+	LocalFileID       string
+	RemoteETag        string
+	ContentHash       string
+	LastSyncDirection string
+	LastSyncAt        time.Time
+	Version           int
+	SyncState         string
+	ConflictFlag      bool
+	DeletedTombstone  bool
+}
+
+type SyncActionType string
+
+const (
+	SyncActionCreateDirLocal   SyncActionType = "CreateDirLocal"
+	SyncActionCreateDirRemote  SyncActionType = "CreateDirRemote"
+	SyncActionUploadFile       SyncActionType = "UploadFile"
+	SyncActionDownloadFile     SyncActionType = "DownloadFile"
+	SyncActionDeleteLocal      SyncActionType = "DeleteLocal"
+	SyncActionDeleteRemote     SyncActionType = "DeleteRemote"
+	SyncActionMoveConflictLocal  SyncActionType = "MoveConflictLocal"
+	SyncActionMoveConflictRemote SyncActionType = "MoveConflictRemote"
+	SyncActionRefreshMetadata  SyncActionType = "RefreshMetadata"
+)
+
+type SyncAction struct {
+	Type         SyncActionType
+	RelativePath string
+	LocalPath    string
+	RemotePath   string
+	ConflictPath string
+	IsDir        bool
+}
+
+type TaskRuntimeView struct {
+	Task          Task
+	Runtime       TaskRuntimeState
+	Queue         []OperationQueueItem
+	Failures      []FailureRecord
+	QueueSummary  TaskQueueSummary
+	FailureSummary TaskFailureSummary
+}
+
+type TaskQueueSummary struct {
+	Total      int
+	Pending    int
+	Executing  int
+	RetryWait  int
+}
+
+type TaskFailureSummary struct {
+	Total     int
+	Resolved  int
+	Open      int
+}
+
 func (t *Task) ApplyDefaults() {
 	if t.Status == "" {
 		t.Status = TaskStatusCreated

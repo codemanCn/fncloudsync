@@ -18,6 +18,7 @@ import (
 	"github.com/xiaoxuesen/fn-cloudsync/internal/scheduler"
 	sqlitestore "github.com/xiaoxuesen/fn-cloudsync/internal/store/sqlite"
 	appsync "github.com/xiaoxuesen/fn-cloudsync/internal/sync"
+	"github.com/xiaoxuesen/fn-cloudsync/internal/watcher"
 )
 
 func main() {
@@ -56,12 +57,19 @@ func run() error {
 	taskService := app.NewTaskService(sqlitestore.NewTaskRepository(db))
 	taskService.SetConnectionRepository(sqlitestore.NewConnectionRepository(db))
 	taskService.SetSecrets(secrets)
-	taskService.SetBaselineRunner(appsync.NewBaselineRunner(webdav.NewClient()))
-	taskService.SetRuntimeRepository(sqlitestore.NewTaskRuntimeRepository(db))
-	taskService.SetFailureRepository(sqlitestore.NewFailureRecordRepository(db))
-	taskService.SetOperationQueueRepository(sqlitestore.NewOperationQueueRepository(db))
+	fileIndexRepo := sqlitestore.NewFileIndexRepository(db)
+	baselineRunner := appsync.NewBaselineRunner(webdav.NewClient())
+	baselineRunner.SetFileIndexRepository(fileIndexRepo)
+	taskService.SetBaselineRunner(baselineRunner)
+	runtimeRepo := sqlitestore.NewTaskRuntimeRepository(db)
+	failureRepo := sqlitestore.NewFailureRecordRepository(db)
+	queueRepo := sqlitestore.NewOperationQueueRepository(db)
+	taskService.SetRuntimeRepository(runtimeRepo)
+	taskService.SetFailureRepository(failureRepo)
+	taskService.SetOperationQueueRepository(queueRepo)
 
-	bgScheduler := scheduler.New(taskService, sqlitestore.NewTaskRuntimeRepository(db), time.Second)
+	bgScheduler := scheduler.New(taskService, runtimeRepo, queueRepo, time.Second)
+	localWatcher := watcher.New(taskService, time.Second, 500*time.Millisecond)
 
 	server := &http.Server{
 		Addr:    cfg.Addr,
@@ -73,6 +81,10 @@ func run() error {
 
 	go func() {
 		bgScheduler.Run(ctx)
+	}()
+
+	go func() {
+		localWatcher.Run(ctx)
 	}()
 
 	go func() {

@@ -55,15 +55,55 @@ Implemented:
 - `POST /api/v1/tasks/{id}/start`
 - `POST /api/v1/tasks/{id}/pause`
 - `POST /api/v1/tasks/{id}/stop`
+- `GET /api/v1/tasks/{id}/runtime`
+- `GET /api/v1/tasks/{id}/failures`
+- `POST /api/v1/tasks/{id}/retry`
+- `POST /api/v1/tasks/{id}/failures/{failure_id}/retry`
 - SQLite bootstrap and migrations for `connections` and `tasks`
 - Password-at-rest encryption before connection persistence
 - Connection delete protection when tasks still reference the connection
 - Router-to-SQLite integration tests for the control plane
 - Minimal WebDAV capability probe via `OPTIONS` + `PROPFIND`
-- Upload-direction task start now performs a one-time local-to-WebDAV baseline sync
-- Download-direction task start now performs a one-time WebDAV-to-local baseline sync
-- Bidirectional task start now performs a conservative baseline sync in both directions
+- Upload/download/bidirectional baseline sync execution
+- Background scheduler with immediate recovery scan on startup
+- Local fsnotify watcher for running upload/bidirectional tasks, with periodic reconcile as fallback
+- Persistent `task_runtime_state`, `operation_queue`, and `failure_records`
+- Persistent `file_index` metadata for synced objects
+- Queue retry consumption with backoff rescheduling
+- Single-direction mirror delete propagation
+- Bidirectional conflict handling for `prefer_local`, `prefer_remote`, and `keep_both`
+- Conservative bidirectional mirror delete propagation gated by prior `file_index` evidence
 
 Not implemented yet:
-- task lifecycle background execution
-- watcher, scheduler, runtime recovery, metrics, frontend
+- advanced conflict history, richer planner/executor states, and resumable chunked transfer
+- remote incremental poll model beyond periodic reconcile
+- metrics, frontend, and admin UX
+
+## Runtime API
+
+Task runtime view:
+
+```bash
+curl http://127.0.0.1:8080/api/v1/tasks/task-1/runtime
+```
+
+Failure list:
+
+```bash
+curl http://127.0.0.1:8080/api/v1/tasks/task-1/failures
+```
+
+Batch retry:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/v1/tasks/task-1/retry
+```
+
+Retry a specific failure:
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/v1/tasks/task-1/failures/fail-1/retry
+```
+
+OpenAPI spec:
+- [openapi.yaml](/Users/xiaoxuesen/LLM/fn-cloudsync/docs/openapi/openapi.yaml)

@@ -45,15 +45,15 @@ func TestSchedulerConsumesDueQueueItems(t *testing.T) {
 	runtime := &stubRuntimeReader{}
 	queue := &stubOperationQueue{
 		items: []domain.OperationQueueItem{
-			{ID: "op-1", TaskID: "task-queued", NextAttemptAt: now.Add(-time.Second)},
+			{ID: "op-1", TaskID: "task-queued", OpType: string(domain.SyncActionUploadFile), NextAttemptAt: now.Add(-time.Second)},
 		},
 	}
 
 	s := scheduler.New(tasks, runtime, queue, time.Hour)
 	s.Tick(context.Background())
 
-	if len(tasks.executed) != 1 || tasks.executed[0] != "task-queued" {
-		t.Fatalf("executed = %v, want queued task", tasks.executed)
+	if len(tasks.executedQueue) != 1 || tasks.executedQueue[0] != "op-1" {
+		t.Fatalf("executed queue = %v, want op-1", tasks.executedQueue)
 	}
 	if len(queue.dequeued) != 1 || queue.dequeued[0] != "op-1" {
 		t.Fatalf("dequeued = %v, want op-1", queue.dequeued)
@@ -88,6 +88,7 @@ func TestSchedulerReschedulesFailedQueueItems(t *testing.T) {
 type stubTaskRunner struct {
 	items       []domain.Task
 	executed    []string
+	executedQueue []string
 	executeErr  error
 }
 
@@ -97,6 +98,11 @@ func (s *stubTaskRunner) List(ctx context.Context) ([]domain.Task, error) {
 
 func (s *stubTaskRunner) ExecuteRunningTask(ctx context.Context, taskID string) error {
 	s.executed = append(s.executed, taskID)
+	return s.executeErr
+}
+
+func (s *stubTaskRunner) ExecuteQueueOperation(ctx context.Context, item domain.OperationQueueItem) error {
+	s.executedQueue = append(s.executedQueue, item.ID)
 	return s.executeErr
 }
 

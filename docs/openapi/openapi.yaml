@@ -1,0 +1,576 @@
+openapi: 3.1.0
+info:
+  title: fn-cloudsync API
+  version: 0.1.0
+  description: Minimal control-plane and runtime API for the single-node WebDAV cloud sync service.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                required: [status]
+
+  /api/v1/connections:
+    get:
+      summary: List connections
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Connection"
+    post:
+      summary: Create connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConnectionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+
+  /api/v1/connections/{connectionID}:
+    parameters:
+      - $ref: "#/components/parameters/ConnectionID"
+    get:
+      summary: Get connection
+      responses:
+        "200":
+          description: Connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      summary: Update connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateConnectionRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+    delete:
+      summary: Delete connection
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/connections/{connectionID}/test:
+    parameters:
+      - $ref: "#/components/parameters/ConnectionID"
+    post:
+      summary: Test connection
+      responses:
+        "200":
+          description: Probe result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionTestResult"
+
+  /api/v1/tasks:
+    get:
+      summary: List tasks
+      responses:
+        "200":
+          description: Tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+    post:
+      summary: Create task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /api/v1/tasks/{taskID}:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    get:
+      summary: Get task
+      responses:
+        "200":
+          description: Task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      summary: Update task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+    delete:
+      summary: Delete task
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskID}/start:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    post:
+      summary: Start task
+      responses:
+        "200":
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /api/v1/tasks/{taskID}/pause:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    post:
+      summary: Pause task
+      responses:
+        "200":
+          description: Paused
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /api/v1/tasks/{taskID}/stop:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    post:
+      summary: Stop task
+      responses:
+        "200":
+          description: Stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+
+  /api/v1/tasks/{taskID}/runtime:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    get:
+      summary: Get aggregated task runtime view
+      responses:
+        "200":
+          description: Runtime view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRuntimeView"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskID}/failures:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    get:
+      summary: List task failures
+      responses:
+        "200":
+          description: Failures
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FailureRecord"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskID}/retry:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    post:
+      summary: Retry all retryable failures for a task
+      responses:
+        "200":
+          description: Retry count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetryResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskID}/failures/{failureID}/retry:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+      - $ref: "#/components/parameters/FailureID"
+    post:
+      summary: Retry a specific failure
+      responses:
+        "200":
+          description: Retry count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetryResponse"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
+components:
+  parameters:
+    ConnectionID:
+      name: connectionID
+      in: path
+      required: true
+      schema:
+        type: string
+    TaskID:
+      name: taskID
+      in: path
+      required: true
+      schema:
+        type: string
+    FailureID:
+      name: failureID
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Error:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    RetryResponse:
+      type: object
+      properties:
+        retried:
+          type: integer
+      required: [retried]
+
+    Connection:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        endpoint:
+          type: string
+        username:
+          type: string
+        root_path:
+          type: string
+        tls_mode:
+          type: string
+        timeout_sec:
+          type: integer
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, name, endpoint, username, status, created_at, updated_at]
+
+    CreateConnectionRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        endpoint:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        root_path:
+          type: string
+        tls_mode:
+          type: string
+        timeout_sec:
+          type: integer
+        status:
+          type: string
+      required: [id, name, endpoint, username, password]
+
+    UpdateConnectionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        endpoint:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        root_path:
+          type: string
+        tls_mode:
+          type: string
+        timeout_sec:
+          type: integer
+        status:
+          type: string
+
+    ConnectionTestResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        capabilities:
+          type: object
+          additionalProperties: true
+        warnings:
+          type: array
+          items:
+            type: string
+      required: [success]
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        connection_id:
+          type: string
+        local_path:
+          type: string
+        remote_path:
+          type: string
+        direction:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, name, connection_id, local_path, remote_path, direction, status, created_at, updated_at]
+
+    CreateTaskRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        connection_id:
+          type: string
+        local_path:
+          type: string
+        remote_path:
+          type: string
+        direction:
+          type: string
+      required: [id, name, connection_id, local_path, remote_path, direction]
+
+    UpdateTaskRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        connection_id:
+          type: string
+        local_path:
+          type: string
+        remote_path:
+          type: string
+        direction:
+          type: string
+
+    FailureRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        path:
+          type: string
+        op_type:
+          type: string
+        error_code:
+          type: string
+        error_message:
+          type: string
+        retryable:
+          type: boolean
+        first_failed_at:
+          type: string
+          format: date-time
+        last_failed_at:
+          type: string
+          format: date-time
+        attempt_count:
+          type: integer
+        resolved_at:
+          type: string
+          format: date-time
+
+    OperationQueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+        op_type:
+          type: string
+        target_path:
+          type: string
+        status:
+          type: string
+        attempt_count:
+          type: integer
+        next_attempt_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    TaskRuntimeState:
+      type: object
+      properties:
+        phase:
+          type: string
+        last_local_scan_at:
+          type: string
+          format: date-time
+        last_remote_scan_at:
+          type: string
+          format: date-time
+        last_reconcile_at:
+          type: string
+          format: date-time
+        last_success_at:
+          type: string
+          format: date-time
+        backoff_until:
+          type: string
+          format: date-time
+        retry_streak:
+          type: integer
+        last_error:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    TaskQueueSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        executing:
+          type: integer
+        retry_wait:
+          type: integer
+
+    TaskFailureSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+        resolved:
+          type: integer
+        open:
+          type: integer
+
+    TaskRuntimeView:
+      type: object
+      properties:
+        task:
+          $ref: "#/components/schemas/Task"
+        runtime:
+          $ref: "#/components/schemas/TaskRuntimeState"
+        queue_summary:
+          $ref: "#/components/schemas/TaskQueueSummary"
+        failure_summary:
+          $ref: "#/components/schemas/TaskFailureSummary"
+        queue:
+          type: array
+          items:
+            $ref: "#/components/schemas/OperationQueueItem"
+        failures:
+          type: array
+          items:
+            $ref: "#/components/schemas/FailureRecord"

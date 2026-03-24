@@ -1,5 +1,19 @@
 # Upload Baseline Sync Implementation Plan
 
+## Status
+
+Completed on 2026-03-24.
+
+Delivered scope:
+- upload baseline runner
+- `TaskService.Start` upload execution wiring
+- API integration coverage for upload baseline start
+
+Superseded by later implementation:
+- planner/executor split
+- queue-backed action execution
+- runtime recovery and retry flow
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `upload` direction tasks perform a one-time local-to-WebDAV baseline sync when the task is started.

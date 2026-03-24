@@ -112,3 +112,81 @@ func TestOperationQueueRepositoryListDueAndReschedule(t *testing.T) {
 		t.Fatalf("NextAttemptAt = %v, want %v", rescheduled.NextAttemptAt, due.NextAttemptAt)
 	}
 }
+
+func TestOperationQueueRepositoryReschedulePersistsStatus(t *testing.T) {
+	t.Parallel()
+
+	db := openTaskScopedDB(t)
+	defer db.Close()
+
+	repo := sqlitestore.NewOperationQueueRepository(db)
+	ctx := context.Background()
+
+	item := domain.OperationQueueItem{
+		ID:        "op-1",
+		TaskID:    "task-1",
+		OpType:    "UploadFile",
+		Status:    "pending",
+		CreatedAt: time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
+	}
+	if err := repo.Enqueue(ctx, item); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+
+	item.Status = "executing"
+	item.UpdatedAt = item.UpdatedAt.Add(time.Minute)
+	if err := repo.Reschedule(ctx, item); err != nil {
+		t.Fatalf("Reschedule() error = %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, item.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if got.Status != "executing" {
+		t.Fatalf("Status = %q, want %q", got.Status, "executing")
+	}
+}
+
+func TestOperationQueueRepositoryResetRetryableByTaskID(t *testing.T) {
+	t.Parallel()
+
+	db := openTaskScopedDB(t)
+	defer db.Close()
+
+	repo := sqlitestore.NewOperationQueueRepository(db)
+	ctx := context.Background()
+
+	item := domain.OperationQueueItem{
+		ID:            "op-1",
+		TaskID:        "task-1",
+		OpType:        "UploadFile",
+		Status:        "retry_wait",
+		NextAttemptAt: time.Date(2026, 3, 24, 12, 0, 0, 0, time.UTC),
+		CreatedAt:     time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
+		UpdatedAt:     time.Date(2026, 3, 24, 11, 0, 0, 0, time.UTC),
+	}
+	if err := repo.Enqueue(ctx, item); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+
+	count, err := repo.ResetRetryableByTaskID(ctx, "task-1")
+	if err != nil {
+		t.Fatalf("ResetRetryableByTaskID() error = %v", err)
+	}
+	if got, want := count, 1; got != want {
+		t.Fatalf("count = %d, want %d", got, want)
+	}
+
+	got, err := repo.GetByID(ctx, "op-1")
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if got.Status != "pending" {
+		t.Fatalf("Status = %q, want %q", got.Status, "pending")
+	}
+	if !got.NextAttemptAt.IsZero() {
+		t.Fatalf("NextAttemptAt = %v, want zero", got.NextAttemptAt)
+	}
+}

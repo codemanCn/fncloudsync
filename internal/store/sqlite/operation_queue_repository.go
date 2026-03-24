@@ -165,7 +165,7 @@ func (r *OperationQueueRepository) Reschedule(ctx context.Context, item domain.O
 		SET status = ?, attempt_count = ?, next_attempt_at = ?, last_error = ?, updated_at = ?
 		WHERE id = ?
 	`,
-		item.StatusOrDefault(),
+		queueStatusOrDefault(item.Status),
 		item.AttemptCount,
 		formatOptionalTimestamp(item.NextAttemptAt),
 		item.LastError,
@@ -183,6 +183,22 @@ func (r *OperationQueueRepository) Reschedule(ctx context.Context, item domain.O
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+func (r *OperationQueueRepository) ResetRetryableByTaskID(ctx context.Context, taskID string) (int, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE operation_queue
+		SET status = 'pending', next_attempt_at = '', updated_at = ?
+		WHERE task_id = ? AND status IN ('retry_wait', 'executing')
+	`, time.Now().UTC().Format(timestampLayout), taskID)
+	if err != nil {
+		return 0, mapSQLError(err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(affected), nil
 }
 
 type operationQueueScanner interface {
@@ -216,4 +232,11 @@ func scanOperationQueueItem(row operationQueueScanner) (domain.OperationQueueIte
 	item.CreatedAt = parseOptionalTimestamp(createdAt)
 	item.UpdatedAt = parseOptionalTimestamp(updatedAt)
 	return item, nil
+}
+
+func queueStatusOrDefault(status string) string {
+	if status == "" {
+		return "pending"
+	}
+	return status
 }

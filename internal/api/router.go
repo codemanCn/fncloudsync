@@ -27,6 +27,10 @@ type taskCreator interface {
 	Start(context.Context, string) (domain.Task, error)
 	Pause(context.Context, string) (domain.Task, error)
 	Stop(context.Context, string) (domain.Task, error)
+	ListFailures(context.Context, string) ([]domain.FailureRecord, error)
+	RetryFailures(context.Context, string) (int, error)
+	RetryFailureByID(context.Context, string, string) (int, error)
+	GetRuntimeView(context.Context, string) (domain.TaskRuntimeView, error)
 }
 
 func NewRouter(connectionService connectionCreator, taskService taskCreator) http.Handler {
@@ -52,6 +56,10 @@ func NewRouter(connectionService connectionCreator, taskService taskCreator) htt
 			r.Post("/tasks/{taskID}/start", handlers.StartTask(taskService))
 			r.Post("/tasks/{taskID}/pause", handlers.PauseTask(taskService))
 			r.Post("/tasks/{taskID}/stop", handlers.StopTask(taskService))
+			r.Get("/tasks/{taskID}/runtime", handlers.GetTaskRuntime(taskService))
+			r.Get("/tasks/{taskID}/failures", handlers.ListTaskFailures(taskService))
+			r.Post("/tasks/{taskID}/retry", handlers.RetryTaskFailures(taskService))
+			r.Post("/tasks/{taskID}/failures/{failureID}/retry", handlers.RetryTaskFailure(taskService))
 		}
 	})
 

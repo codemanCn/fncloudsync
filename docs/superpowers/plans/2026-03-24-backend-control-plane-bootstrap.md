@@ -1,5 +1,21 @@
 # Backend Control Plane Bootstrap Implementation Plan
 
+## Status
+
+Completed on 2026-03-24.
+
+Delivered scope:
+- runnable Go service skeleton with `cmd/server`, config, logger, and SQLite bootstrap
+- connection/task CRUD API
+- connection password encryption
+- connection test endpoint
+- control-plane integration tests
+
+Follow-up work moved beyond this plan:
+- runtime execution
+- queue, watcher, scheduler, and failure handling
+- runtime/failure/retry HTTP APIs
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the first runnable Go backend skeleton for the WebDAV cloud sync product with health check, connection CRUD, task CRUD, SQLite persistence, and validation-ready service boundaries.
