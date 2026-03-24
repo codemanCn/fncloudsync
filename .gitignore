@@ -1,0 +1,19 @@
+# Binaries
+bin/
+dist/
+
+# Coverage
+coverage.out
+*.coverprofile
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Local environment
+.env
+.env.local
+
+# macOS
+.DS_Store
