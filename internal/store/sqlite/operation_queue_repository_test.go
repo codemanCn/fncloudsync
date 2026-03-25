@@ -38,9 +38,20 @@ func TestOperationQueueRepositoryEnqueueListAndDequeue(t *testing.T) {
 	if len(items) != 1 || items[0].ID != item.ID {
 		t.Fatalf("ListByTaskID() = %+v, want item %q", items, item.ID)
 	}
+	if got, want := items[0].Status, "queued"; got != want {
+		t.Fatalf("Status = %q, want %q", got, want)
+	}
 
 	if err := repo.Dequeue(ctx, item.ID); err != nil {
 		t.Fatalf("Dequeue() error = %v", err)
+	}
+
+	completed, err := repo.GetByID(ctx, item.ID)
+	if err != nil {
+		t.Fatalf("GetByID() after Dequeue error = %v", err)
+	}
+	if got, want := completed.Status, "succeeded"; got != want {
+		t.Fatalf("Status after Dequeue = %q, want %q", got, want)
 	}
 }
 
@@ -183,8 +194,8 @@ func TestOperationQueueRepositoryResetRetryableByTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByID() error = %v", err)
 	}
-	if got.Status != "pending" {
-		t.Fatalf("Status = %q, want %q", got.Status, "pending")
+	if got.Status != "queued" {
+		t.Fatalf("Status = %q, want %q", got.Status, "queued")
 	}
 	if !got.NextAttemptAt.IsZero() {
 		t.Fatalf("NextAttemptAt = %v, want zero", got.NextAttemptAt)

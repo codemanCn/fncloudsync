@@ -1,0 +1,1966 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CloudSync 控制台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f8;
+      --panel: #ffffff;
+      --panel-alt: #f7f9fc;
+      --line: #dbe3ee;
+      --line-strong: #c6d2df;
+      --text: #203040;
+      --muted: #66788a;
+      --brand: #1270c9;
+      --brand-soft: #e8f2fc;
+      --success: #2e8b57;
+      --warning: #b56a08;
+      --danger: #cc3d34;
+      --danger-soft: #feeeec;
+      --success-soft: #ebf7ef;
+      --shadow: 0 18px 60px rgba(33, 57, 88, 0.12);
+      --radius: 16px;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(18, 112, 201, 0.12), transparent 24rem),
+        radial-gradient(circle at right bottom, rgba(46, 139, 87, 0.1), transparent 22rem),
+        var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    button, input, select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      background: none;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .app {
+      width: min(1400px, 100%);
+      min-height: calc(100vh - 32px);
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.76);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .titlebar {
+      height: 46px;
+      padding: 0 16px;
+      background: linear-gradient(180deg, #f9fbfd 0%, #eef3f8 100%);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .traffic {
+      display: flex;
+      gap: 8px;
+    }
+
+    .traffic span {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
+    .traffic .red { background: #ff5f56; }
+    .traffic .yellow { background: #ffbd2e; }
+    .traffic .green { background: #27c93f; }
+
+    .brand {
+      margin: 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .brand-badge {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: linear-gradient(135deg, #1270c9 0%, #2e8b57 100%);
+      font-size: 11px;
+    }
+
+    .shell {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+    }
+
+    .sidebar {
+      background: linear-gradient(180deg, #f4f7fb 0%, #edf2f7 100%);
+      border-right: 1px solid var(--line);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .sidebar-title {
+      display: grid;
+      gap: 4px;
+    }
+
+    .sidebar-title strong {
+      font-size: 17px;
+    }
+
+    .sidebar-title span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tree {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+
+    .tree-group {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.7);
+      overflow: hidden;
+    }
+
+    .tree-group-head {
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(18, 112, 201, 0.04);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .tree-node {
+      width: 100%;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 10px;
+      text-align: left;
+      color: inherit;
+    }
+
+    .tree-node + .tree-node {
+      border-top: 1px solid var(--line);
+    }
+
+    .tree-node:hover {
+      background: rgba(18, 112, 201, 0.05);
+    }
+
+    .tree-node.active {
+      background: var(--brand-soft);
+    }
+
+    .tree-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: rgba(18, 112, 201, 0.12);
+      color: var(--brand);
+      font-size: 12px;
+    }
+
+    .tree-copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .tree-copy strong, .tree-copy span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tree-copy strong { font-size: 14px; }
+    .tree-copy span { font-size: 12px; color: var(--muted); }
+
+    .sidebar-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.92);
+      flex-shrink: 0;
+    }
+
+    .toolbar-copy {
+      display: grid;
+      gap: 4px;
+    }
+
+    .toolbar-copy h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+
+    .toolbar-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.78);
+      flex-shrink: 0;
+      overflow: auto;
+    }
+
+    .tab {
+      padding: 14px 14px 12px;
+      font-size: 14px;
+      color: var(--muted);
+      position: relative;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      color: var(--brand);
+      font-weight: 700;
+    }
+
+    .tab.active::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 0;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--brand);
+    }
+
+    .content {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      padding: 20px;
+    }
+
+    .panel {
+      display: none;
+      gap: 16px;
+    }
+
+    .panel.active {
+      display: grid;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: 0 10px 30px rgba(26, 45, 72, 0.05);
+    }
+
+    .card-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .card-head h2,
+    .card-head h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .card-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .card-body {
+      padding: 18px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #eef6fd 0%, #edf8f1 100%);
+    }
+
+    .hero-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .hero-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .hero-logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.9);
+      display: grid;
+      place-items: center;
+      font-size: 24px;
+      color: var(--brand);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    .hero-copy h2 {
+      margin: 0 0 6px;
+      font-size: 26px;
+    }
+
+    .hero-copy p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    .pill.warn {
+      background: #fff4e5;
+      color: var(--warning);
+    }
+
+    .pill.danger {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .overview-grid,
+    .settings-grid,
+    .schedule-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .overview-grid {
+      grid-template-columns: 1.3fr 1fr;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      padding: 16px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+    }
+
+    .stat span {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .stat strong {
+      font-size: 26px;
+    }
+
+    .details {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .detail {
+      padding: 14px;
+      border-radius: 12px;
+      background: var(--panel-alt);
+      border: 1px solid var(--line);
+    }
+
+    .detail span {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .detail strong,
+    .detail code {
+      display: block;
+      font-size: 14px;
+      word-break: break-all;
+    }
+
+    .menu-anchor {
+      position: relative;
+    }
+
+    .menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 170px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 18px 32px rgba(17, 34, 56, 0.12);
+      overflow: hidden;
+      display: none;
+      z-index: 5;
+    }
+
+    .menu.show { display: block; }
+
+    .menu button {
+      width: 100%;
+      text-align: left;
+      padding: 12px 14px;
+    }
+
+    .menu button:hover {
+      background: var(--panel-alt);
+    }
+
+    .table-shell {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    th {
+      background: #f7f9fc;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    tbody tr.selected {
+      background: var(--brand-soft);
+    }
+
+    tbody tr:hover {
+      background: #f6fafe;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .toolbar-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .primary,
+    .ghost,
+    .danger-btn {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: #fff;
+      color: var(--text);
+    }
+
+    .primary {
+      border-color: #0f65b6;
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .danger-btn {
+      border-color: #e7b2ac;
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .ghost[disabled], .primary[disabled], .danger-btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .mono {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+
+    .search {
+      min-width: 220px;
+      padding: 10px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input,
+    select {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .field-help {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+    }
+
+    .schedule-matrix {
+      display: grid;
+      gap: 8px;
+    }
+
+    .schedule-head,
+    .schedule-row {
+      display: grid;
+      grid-template-columns: 46px repeat(24, minmax(20px, 1fr));
+      gap: 4px;
+      align-items: center;
+    }
+
+    .schedule-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .slot {
+      height: 24px;
+      border-radius: 7px;
+      border: 1px solid var(--line);
+      background: #f1f4f8;
+    }
+
+    .slot.active {
+      background: linear-gradient(135deg, #1270c9 0%, #2e8b57 100%);
+      border-color: transparent;
+    }
+
+    .flash {
+      display: none;
+      margin-bottom: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      border: 1px solid transparent;
+    }
+
+    .flash.show { display: block; }
+    .flash.ok {
+      background: var(--success-soft);
+      color: var(--success);
+      border-color: #cfe8d7;
+    }
+    .flash.error {
+      background: var(--danger-soft);
+      color: var(--danger);
+      border-color: #f0c3bf;
+    }
+
+    .empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line-strong);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.6);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(12, 23, 40, 0.34);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 20;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal {
+      width: min(760px, 100%);
+      background: #fff;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: 0 24px 80px rgba(14, 27, 44, 0.24);
+      overflow: hidden;
+    }
+
+    .modal-head,
+    .modal-foot {
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-foot {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      justify-content: flex-end;
+    }
+
+    .modal-body {
+      padding: 18px;
+    }
+
+    .steps {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .step {
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: #eff3f8;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .step.active {
+      background: var(--brand-soft);
+      color: var(--brand);
+    }
+
+    .provider-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .provider {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      text-align: left;
+      background: #fff;
+    }
+
+    .provider.active {
+      border-color: #9ec9ee;
+      background: var(--brand-soft);
+    }
+
+    .provider strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .provider span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1100px) {
+      .shell, .overview-grid, .split {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+    }
+
+    @media (max-width: 760px) {
+      body { padding: 0; }
+      .app {
+        min-height: 100vh;
+        border-radius: 0;
+      }
+      .form-grid,
+      .details,
+      .provider-grid,
+      .stats {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="titlebar">
+      <div class="traffic">
+        <span class="red"></span>
+        <span class="yellow"></span>
+        <span class="green"></span>
+      </div>
+      <div class="brand">
+        <span class="brand-badge">CS</span>
+        <span>CloudSync 控制台</span>
+      </div>
+    </div>
+
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">
+            <strong>连接树</strong>
+            <span>应用层仅关注连接与任务工作台</span>
+          </div>
+        </div>
+        <div class="tree" id="connection-tree"></div>
+        <div class="sidebar-actions">
+          <button class="primary" id="open-connection-modal" type="button">新增</button>
+          <button class="ghost" id="open-global-settings" type="button">设置</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="toolbar">
+          <div class="toolbar-copy">
+            <h1 id="page-heading">Cloud Sync</h1>
+            <p id="page-subtitle">连接、任务与日志的统一工作台</p>
+          </div>
+          <div class="toolbar-actions">
+            <button class="primary" id="toolbar-add" type="button">新增</button>
+            <button class="ghost" id="toolbar-settings" type="button">设置</button>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" type="button" data-tab="overview">总览</button>
+          <button class="tab" type="button" data-tab="tasks">任务列表</button>
+          <button class="tab" type="button" data-tab="schedule">计划</button>
+          <button class="tab" type="button" data-tab="settings">设置</button>
+          <button class="tab" type="button" data-tab="logs">日志</button>
+        </div>
+
+        <div class="content">
+          <div class="flash" id="flash"></div>
+
+          <section class="panel active" data-panel="overview">
+            <div class="card hero">
+              <div class="card-body">
+                <div class="hero-main">
+                  <div class="hero-title">
+                    <div class="hero-logo">☁</div>
+                    <div class="hero-copy">
+                      <h2 id="overview-connection-name">未连接</h2>
+                      <p id="overview-connection-summary">请选择左侧连接查看状态与连接信息</p>
+                    </div>
+                  </div>
+                  <div class="menu-anchor">
+                    <button class="ghost" id="manage-trigger" type="button">管理</button>
+                    <div class="menu" id="manage-menu">
+                      <button id="pause-connection" type="button">暂停同步</button>
+                      <button id="unlink-connection" type="button">取消链接</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="stats">
+                  <div class="stat">
+                    <span>连接状态</span>
+                    <strong id="overview-status">最新的</strong>
+                  </div>
+                  <div class="stat">
+                    <span>任务数量</span>
+                    <strong id="overview-task-count">0</strong>
+                  </div>
+                  <div class="stat">
+                    <span>异常数量</span>
+                    <strong id="overview-failure-count">0</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="overview-grid">
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h2>连接信息</h2>
+                    <p>与 Cloud Sync 分析保持一致的连接级摘要</p>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="details" id="connection-info-grid"></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h2>同步提示</h2>
+                    <p>应用层状态反馈</p>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="detail">
+                    <span>最新状态</span>
+                    <strong id="overview-message">您的 Synology NAS 已是最新状态。</strong>
+                  </div>
+                  <div class="detail" style="margin-top:12px">
+                    <span>当前日志预览</span>
+                    <strong id="overview-log-hint">暂无最近事件。</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="tasks">
+            <div class="card">
+              <div class="card-body">
+                <div class="toolbar-line">
+                  <div class="toolbar-group">
+                    <button class="primary" id="open-task-modal" type="button">新增</button>
+                    <button class="ghost" id="edit-task" type="button" disabled>编辑</button>
+                    <button class="ghost" id="open-task" type="button" disabled>打开</button>
+                    <button class="danger-btn" id="delete-task" type="button" disabled>删除</button>
+                  </div>
+                  <div class="toolbar-group">
+                    <input class="search" id="task-search" type="search" placeholder="搜索本地路径、远程路径、任务名">
+                  </div>
+                </div>
+                <div class="table-shell">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>本地路径</th>
+                        <th>远程路径</th>
+                        <th>状态</th>
+                        <th>同步优先级</th>
+                      </tr>
+                    </thead>
+                    <tbody id="task-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="split">
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h3>任务详情</h3>
+                    <p>选中任务后显示可操作状态</p>
+                  </div>
+                  <div class="toolbar-group">
+                    <button class="ghost" id="task-start" type="button" disabled>启动</button>
+                    <button class="ghost" id="task-pause" type="button" disabled>暂停</button>
+                    <button class="ghost" id="task-stop" type="button" disabled>停止</button>
+                    <button class="ghost" id="task-retry" type="button" disabled>重试失败</button>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="details" id="task-detail-grid"></div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h3>打开结果</h3>
+                    <p>应用层只保留定位语义，不跳 DSM 文件管理器</p>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="detail">
+                    <span>当前路径</span>
+                    <strong id="open-task-result">未选择任务。</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="schedule">
+            <div class="schedule-grid">
+              <div class="card">
+                <div class="card-head">
+                  <div>
+                    <h2>计划</h2>
+                    <p>连接级调度控制，遵循 Cloud Sync 7x24 矩阵模型</p>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <div class="toolbar-line">
+                    <div class="toolbar-group">
+                      <label style="display:flex;align-items:center;gap:8px;color:var(--text)">
+                        <input id="schedule-enabled" type="checkbox" style="width:auto">
+                        <span>计划设置</span>
+                      </label>
+                    </div>
+                    <div class="toolbar-group">
+                      <button class="ghost" id="schedule-pause" type="button">暂停</button>
+                      <button class="ghost" id="schedule-run" type="button">运行</button>
+                    </div>
+                  </div>
+                  <div class="schedule-matrix" id="schedule-matrix"></div>
+                  <p class="field-help">注意: 进入暂停模式会终止任务。</p>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-body">
+                  <div class="toolbar-group">
+                    <button class="ghost" id="schedule-reset" type="button">重置</button>
+                    <button class="primary" id="schedule-apply" type="button">应用</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="settings">
+            <div class="card">
+              <div class="card-head">
+                <div>
+                  <h2>设置</h2>
+                  <p>当前连接级常规设置与流量控制</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <form id="connection-settings-form" class="settings-grid">
+                  <div class="form-grid">
+                    <label>连接名称
+                      <input name="name" required>
+                    </label>
+                    <label>轮询期（秒）
+                      <input name="poll_interval_sec" type="number" min="1" value="60">
+                    </label>
+                    <label>单个文件最大上传速率（KB/s）
+                      <input name="upload_limit_kbps" type="number" min="0" value="0">
+                    </label>
+                    <label>单个文件最大下载速率（KB/s）
+                      <input name="download_limit_kbps" type="number" min="0" value="0">
+                    </label>
+                  </div>
+                  <div class="toolbar-group">
+                    <button class="ghost" id="settings-reset" type="button">重置</button>
+                    <button class="primary" type="submit">应用</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" data-panel="logs">
+            <div class="card">
+              <div class="card-body">
+                <div class="toolbar-line">
+                  <div class="toolbar-group">
+                    <button class="ghost" id="open-log-entry" type="button" disabled>打开</button>
+                  </div>
+                  <div class="toolbar-group">
+                    <input class="search" id="log-search" type="search" placeholder="搜索文件名、事件、层级">
+                    <button class="ghost" id="advanced-log-search" type="button">高级搜索</button>
+                  </div>
+                </div>
+                <div class="table-shell">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>层级</th>
+                        <th>日期与时间</th>
+                        <th>名称</th>
+                        <th>文件/文件夹</th>
+                        <th>事件</th>
+                      </tr>
+                    </thead>
+                    <tbody id="logs-table-body"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="connection-wizard-modal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="connection-modal-title">
+      <div class="modal-head">
+        <div>
+          <strong id="connection-modal-title">Cloud Sync</strong>
+          <div class="field-help" id="wizard-subtitle">云供应商</div>
+        </div>
+        <button class="ghost" id="close-connection-wizard" type="button">关闭</button>
+      </div>
+      <div class="modal-body">
+        <div class="steps">
+          <div class="step active" data-step="provider">云供应商</div>
+          <div class="step" data-step="account">帐户设置</div>
+        </div>
+
+        <div id="wizard-provider-step">
+          <label>搜索
+            <input id="provider-search" type="search" placeholder="搜索协议或云服务">
+          </label>
+          <div class="provider-grid" id="provider-grid" style="margin-top:14px"></div>
+        </div>
+
+        <form id="connection-form" class="hidden">
+          <div class="form-grid">
+            <label>连接 ID
+              <input name="id" required placeholder="例如 webdav-primary">
+            </label>
+            <label>连接名称
+              <input name="name" required placeholder="例如 WebDAV">
+            </label>
+            <label>服务器地址
+              <input name="endpoint" required placeholder="https://dav.example.com/root">
+            </label>
+            <label>用户帐户
+              <input name="username" required>
+            </label>
+            <label>密码
+              <input name="password" type="password" required>
+            </label>
+            <label>根路径
+              <input name="root_path" value="/">
+            </label>
+            <label>TLS 模式
+              <select name="tls_mode">
+                <option value="strict">strict</option>
+                <option value="skip_verify">skip_verify</option>
+              </select>
+            </label>
+            <label>超时（秒）
+              <input name="timeout_sec" type="number" min="1" value="30">
+            </label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost hidden" id="wizard-back" type="button">上一步</button>
+        <button class="primary" id="wizard-next" type="button">下一步</button>
+        <button class="primary hidden" id="wizard-submit" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="task-modal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
+      <div class="modal-head">
+        <div>
+          <strong id="task-modal-title">任务设置</strong>
+          <div class="field-help">任务列表中的新增/编辑入口</div>
+        </div>
+        <button class="ghost" id="close-task-modal" type="button">关闭</button>
+      </div>
+      <div class="modal-body">
+        <form id="task-form">
+          <div class="form-grid">
+            <label>任务 ID
+              <input name="id" required>
+            </label>
+            <label>任务名称
+              <input name="name" required>
+            </label>
+            <label>连接 ID
+              <input name="connection_id" required>
+            </label>
+            <label>同步方向
+              <select name="direction">
+                <option value="upload">upload</option>
+                <option value="download">download</option>
+                <option value="bidirectional">bidirectional</option>
+              </select>
+            </label>
+            <label>本地路径
+              <input name="local_path" required>
+            </label>
+            <label>远程路径
+              <input name="remote_path" required>
+            </label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost" id="cancel-task-modal" type="button">取消</button>
+        <button class="primary" id="submit-task-modal" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="global-settings-modal" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="global-settings-title">
+      <div class="modal-head">
+        <div>
+          <strong id="global-settings-title">Cloud Sync 设置</strong>
+          <div class="field-help">应用级全局设置，仅实现前端交互层</div>
+        </div>
+        <button class="ghost" id="close-global-settings" type="button">关闭</button>
+      </div>
+      <div class="modal-body">
+        <form id="global-settings-form" class="form-grid">
+          <label>数据库位置设置
+            <select name="db_location">
+              <option value="storage-1">存储空间 1</option>
+            </select>
+          </label>
+          <label>同时传输的数量
+            <select name="concurrency">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+            </select>
+          </label>
+          <label>记录数上限
+            <input name="record_limit" type="number" min="1000" value="20000">
+          </label>
+          <label>管理员模式
+            <select name="admin_mode">
+              <option value="enabled">已启用</option>
+              <option value="disabled">已停用</option>
+            </select>
+          </label>
+          <label>本地删除文件默认策略
+            <select name="delete_strategy">
+              <option value="download_again">本地删除的文件将从您的公共云上再次下载</option>
+              <option value="sync_delete">本地删除的文件将在您的公共云上同步进行删除</option>
+            </select>
+          </label>
+        </form>
+      </div>
+      <div class="modal-foot">
+        <button class="ghost" id="cancel-global-settings" type="button">取消</button>
+        <button class="primary" id="save-global-settings" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      connections: [],
+      tasks: [],
+      metrics: null,
+      selectedConnectionID: "",
+      selectedTaskID: "",
+      selectedLogIndex: -1,
+      activeTab: "overview",
+      loading: false,
+      taskFormMode: "create",
+      providerStep: "provider",
+      selectedProvider: "WebDAV",
+      schedule: {},
+      connectionPrefs: {},
+      globalSettings: {
+        db_location: "storage-1",
+        concurrency: "3",
+        record_limit: "20000",
+        admin_mode: "enabled",
+        delete_strategy: "download_again",
+      },
+      taskDetails: new Map(),
+    };
+
+    const providers = [
+      ["Synology C2 Object Storage", "对象存储"],
+      ["百度云", "对象存储"],
+      ["Dropbox", "文件云盘"],
+      ["Google 云端硬盘", "文件云盘"],
+      ["Microsoft OneDrive", "文件云盘"],
+      ["S3 storage", "对象存储"],
+      ["WebDAV", "通用协议"],
+      ["Yandex Disk", "文件云盘"],
+    ];
+
+    const days = ["日", "一", "二", "三", "四", "五", "六"];
+    const flash = document.getElementById("flash");
+    const connectionTree = document.getElementById("connection-tree");
+    const taskTableBody = document.getElementById("task-table-body");
+    const taskDetailGrid = document.getElementById("task-detail-grid");
+    const logsTableBody = document.getElementById("logs-table-body");
+    const connectionInfoGrid = document.getElementById("connection-info-grid");
+    const scheduleMatrix = document.getElementById("schedule-matrix");
+    const connectionSettingsForm = document.getElementById("connection-settings-form");
+    const connectionModal = document.getElementById("connection-wizard-modal");
+    const taskModal = document.getElementById("task-modal");
+    const globalSettingsModal = document.getElementById("global-settings-modal");
+    const connectionForm = document.getElementById("connection-form");
+    const taskForm = document.getElementById("task-form");
+    const globalSettingsForm = document.getElementById("global-settings-form");
+    const providerGrid = document.getElementById("provider-grid");
+    const providerSearch = document.getElementById("provider-search");
+
+    function escapeHTML(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[char]));
+    }
+
+    function showFlash(message, tone = "ok") {
+      flash.className = `flash show ${tone}`;
+      flash.textContent = message;
+      clearTimeout(showFlash.timer);
+      showFlash.timer = setTimeout(() => flash.classList.remove("show"), 2400);
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      if (response.status === 204) return null;
+      const text = await response.text();
+      const payload = text ? JSON.parse(text) : null;
+      if (!response.ok) throw new Error(payload?.error || `请求失败: ${response.status}`);
+      return payload;
+    }
+
+    function selectedConnection() {
+      return state.connections.find((item) => item.id === state.selectedConnectionID) || state.connections[0] || null;
+    }
+
+    function selectedTask() {
+      return state.tasks.find((item) => item.id === state.selectedTaskID) || null;
+    }
+
+    function tasksForConnection() {
+      const connection = selectedConnection();
+      if (!connection) return [];
+      return state.tasks.filter((task) => task.connection_id === connection.id);
+    }
+
+    function logsForConnection() {
+      return tasksForConnection().flatMap((task) => {
+        const detail = state.taskDetails.get(task.id);
+        const events = detail?.events || [];
+        return events.map((event) => ({
+          task,
+          level: event.level || "信息",
+          time: event.created_at || event.occurred_at || "",
+          name: event.path || task.name,
+          kind: event.path_type || "文件",
+          event: event.message || event.event || detail?.runtime?.phase || "更新。",
+        }));
+      }).sort((a, b) => String(b.time).localeCompare(String(a.time)));
+    }
+
+    function statusLabel(status) {
+      if (!status) return "未知";
+      if (["running", "active"].includes(status)) return "运行中";
+      if (["paused"].includes(status)) return "暂停";
+      if (["failed", "error"].includes(status)) return "异常";
+      return status === "idle" ? "最新的" : status;
+    }
+
+    function providerType(connection) {
+      if (!connection) return "WebDAV";
+      return connection.endpoint?.toLowerCase().includes("s3") ? "S3" : "WebDAV";
+    }
+
+    function priorityLabel(task) {
+      const workers = Number(task.max_workers || 0);
+      if (workers >= 4) return "高";
+      if (workers >= 2) return "中";
+      return "中";
+    }
+
+    function fmtTime(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString("zh-CN", { hour12: false });
+    }
+
+    function renderConnectionTree() {
+      if (state.connections.length === 0) {
+        connectionTree.innerHTML = '<div class="empty">暂无连接，点击“新增”创建 WebDAV 连接。</div>';
+        return;
+      }
+      const groups = new Map();
+      for (const connection of state.connections) {
+        const account = connection.username || "未命名帐号";
+        if (!groups.has(account)) groups.set(account, []);
+        groups.get(account).push(connection);
+      }
+      connectionTree.innerHTML = Array.from(groups.entries()).map(([account, items]) => `
+        <div class="tree-group">
+          <div class="tree-group-head">${escapeHTML(account)}</div>
+          ${items.map((connection) => `
+            <button class="tree-node ${connection.id === (selectedConnection()?.id || "") ? "active" : ""}" type="button" data-select-connection="${escapeHTML(connection.id)}">
+              <span class="tree-icon">☁</span>
+              <span class="tree-copy">
+                <strong>${escapeHTML(connection.name)}</strong>
+                <span>${escapeHTML(providerType(connection))} · ${escapeHTML(statusLabel(connection.status))}</span>
+              </span>
+            </button>
+          `).join("")}
+        </div>
+      `).join("");
+    }
+
+    function renderOverview() {
+      const connection = selectedConnection();
+      const tasks = tasksForConnection();
+      const logs = logsForConnection();
+      document.getElementById("overview-connection-name").textContent = connection ? connection.name : "未连接";
+      document.getElementById("overview-connection-summary").textContent = connection
+        ? `${providerType(connection)} · ${connection.username} · ${connection.endpoint}`
+        : "请选择左侧连接查看状态与连接信息";
+      document.getElementById("overview-status").textContent = connection ? statusLabel(connection.status) : "-";
+      document.getElementById("overview-task-count").textContent = String(tasks.length);
+      document.getElementById("overview-failure-count").textContent = String(tasks.filter((task) => task.last_error).length);
+      document.getElementById("overview-message").textContent = connection
+        ? connection.status === "failed" ? "当前连接存在异常，请查看日志。" : "您的 Synology NAS 已是最新状态。"
+        : "当前没有可展示的连接。";
+      document.getElementById("overview-log-hint").textContent = logs[0]
+        ? `${logs[0].name} · ${logs[0].event}`
+        : "暂无最近事件。";
+      connectionInfoGrid.innerHTML = connection ? [
+        ["公共云类型", providerType(connection)],
+        ["用户名称", connection.username || "-"],
+        ["服务器地址", connection.endpoint || "-"],
+        ["根路径", connection.root_path || "/"],
+        ["连接 ID", connection.id],
+        ["更新时间", fmtTime(connection.updated_at)],
+      ].map(([label, value]) => `
+        <div class="detail">
+          <span>${escapeHTML(label)}</span>
+          <code>${escapeHTML(value)}</code>
+        </div>
+      `).join("") : '<div class="empty" style="grid-column:1 / -1">暂无连接信息。</div>';
+    }
+
+    function renderTaskTable() {
+      const q = document.getElementById("task-search").value.trim().toLowerCase();
+      const tasks = tasksForConnection().filter((task) => {
+        const text = `${task.name} ${task.local_path} ${task.remote_path}`.toLowerCase();
+        return !q || text.includes(q);
+      });
+      if (tasks.length === 0) {
+        taskTableBody.innerHTML = '<tr><td colspan="4"><div class="empty">当前连接下暂无任务。</div></td></tr>';
+      } else {
+        taskTableBody.innerHTML = tasks.map((task) => `
+          <tr class="${task.id === state.selectedTaskID ? "selected" : ""}" data-select-task="${escapeHTML(task.id)}">
+            <td class="mono">${escapeHTML(task.local_path)}</td>
+            <td class="mono">${escapeHTML(task.remote_path)}</td>
+            <td>${escapeHTML(statusLabel(task.status))}</td>
+            <td>${escapeHTML(priorityLabel(task))}</td>
+          </tr>
+        `).join("");
+      }
+      renderTaskDetail();
+    }
+
+    function renderTaskDetail() {
+      const task = selectedTask();
+      const detail = task ? state.taskDetails.get(task.id) : null;
+      const disabled = !task;
+      ["edit-task", "open-task", "delete-task", "task-start", "task-pause", "task-stop", "task-retry"].forEach((id) => {
+        document.getElementById(id).disabled = disabled;
+      });
+      if (!task) {
+        taskDetailGrid.innerHTML = '<div class="empty" style="grid-column:1 / -1">请选择任务。</div>';
+        document.getElementById("open-task-result").textContent = "未选择任务。";
+        return;
+      }
+      const runtime = detail?.runtime || {};
+      taskDetailGrid.innerHTML = [
+        ["任务名称", task.name],
+        ["任务 ID", task.id],
+        ["同步方向", task.direction],
+        ["状态", statusLabel(task.status)],
+        ["本地路径", task.local_path],
+        ["远程路径", task.remote_path],
+        ["运行阶段", runtime.phase || "-"],
+        ["最后错误", task.last_error || "-"],
+      ].map(([label, value]) => `
+        <div class="detail">
+          <span>${escapeHTML(label)}</span>
+          <code>${escapeHTML(value)}</code>
+        </div>
+      `).join("");
+    }
+
+    function ensureSchedule(connectionID) {
+      if (!connectionID) return null;
+      if (!state.schedule[connectionID]) {
+        state.schedule[connectionID] = { enabled: false, mode: "run", slots: Array.from({ length: 7 }, () => Array(24).fill(false)) };
+      }
+      return state.schedule[connectionID];
+    }
+
+    function renderSchedule() {
+      const connection = selectedConnection();
+      const schedule = ensureSchedule(connection?.id);
+      document.getElementById("schedule-enabled").checked = !!schedule?.enabled;
+      if (!schedule) {
+        scheduleMatrix.innerHTML = '<div class="empty">请选择连接后配置计划。</div>';
+        return;
+      }
+      const head = `
+        <div class="schedule-head">
+          <div></div>
+          ${Array.from({ length: 24 }, (_, hour) => `<div class="schedule-label">${hour}</div>`).join("")}
+        </div>`;
+      const rows = days.map((day, dayIndex) => `
+        <div class="schedule-row">
+          <div class="schedule-label">${day}</div>
+          ${schedule.slots[dayIndex].map((active, hour) => `
+            <button class="slot ${active ? "active" : ""} ${schedule.enabled ? "" : "disabled"}" type="button" data-slot="${dayIndex}:${hour}" ${schedule.enabled ? "" : "disabled"}></button>
+          `).join("")}
+        </div>
+      `).join("");
+      scheduleMatrix.innerHTML = head + rows;
+    }
+
+    function connectionPrefs(connection) {
+      if (!connection) return { name: "", poll_interval_sec: 60, upload_limit_kbps: 0, download_limit_kbps: 0 };
+      if (!state.connectionPrefs[connection.id]) {
+        state.connectionPrefs[connection.id] = {
+          name: connection.name,
+          poll_interval_sec: 60,
+          upload_limit_kbps: 0,
+          download_limit_kbps: 0,
+        };
+      }
+      return state.connectionPrefs[connection.id];
+    }
+
+    function renderConnectionSettings() {
+      const prefs = connectionPrefs(selectedConnection());
+      connectionSettingsForm.name.value = prefs.name || "";
+      connectionSettingsForm.poll_interval_sec.value = prefs.poll_interval_sec;
+      connectionSettingsForm.upload_limit_kbps.value = prefs.upload_limit_kbps;
+      connectionSettingsForm.download_limit_kbps.value = prefs.download_limit_kbps;
+    }
+
+    function renderLogs() {
+      const q = document.getElementById("log-search").value.trim().toLowerCase();
+      const rows = logsForConnection().filter((row) => {
+        const text = `${row.level} ${row.name} ${row.event} ${row.kind}`.toLowerCase();
+        return !q || text.includes(q);
+      });
+      document.getElementById("open-log-entry").disabled = rows.length === 0 || state.selectedLogIndex < 0;
+      if (rows.length === 0) {
+        logsTableBody.innerHTML = '<tr><td colspan="5"><div class="empty">暂无日志。</div></td></tr>';
+        return;
+      }
+      logsTableBody.innerHTML = rows.map((row, index) => `
+        <tr class="${index === state.selectedLogIndex ? "selected" : ""}" data-select-log="${index}">
+          <td>${escapeHTML(row.level)}</td>
+          <td>${escapeHTML(fmtTime(row.time))}</td>
+          <td>${escapeHTML(row.name)}</td>
+          <td>${escapeHTML(row.kind)}</td>
+          <td>${escapeHTML(row.event)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function setActiveTab(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll(".tab").forEach((node) => node.classList.toggle("active", node.dataset.tab === tab));
+      document.querySelectorAll(".panel").forEach((node) => node.classList.toggle("active", node.dataset.panel === tab));
+    }
+
+    function openModal(node) {
+      node.classList.add("show");
+      node.setAttribute("aria-hidden", "false");
+    }
+
+    function closeModal(node) {
+      node.classList.remove("show");
+      node.setAttribute("aria-hidden", "true");
+    }
+
+    function renderProviderList() {
+      const query = providerSearch.value.trim().toLowerCase();
+      providerGrid.innerHTML = providers
+        .filter(([name, hint]) => !query || `${name} ${hint}`.toLowerCase().includes(query))
+        .map(([name, hint]) => `
+          <button class="provider ${name === state.selectedProvider ? "active" : ""}" type="button" data-provider="${escapeHTML(name)}">
+            <strong>${escapeHTML(name)}</strong>
+            <span>${escapeHTML(hint)}</span>
+          </button>
+        `).join("");
+    }
+
+    function setWizardStep(step) {
+      state.providerStep = step;
+      document.querySelectorAll(".step").forEach((node) => node.classList.toggle("active", node.dataset.step === step));
+      document.getElementById("wizard-provider-step").classList.toggle("hidden", step !== "provider");
+      connectionForm.classList.toggle("hidden", step !== "account");
+      document.getElementById("wizard-back").classList.toggle("hidden", step === "provider");
+      document.getElementById("wizard-next").classList.toggle("hidden", step === "account");
+      document.getElementById("wizard-submit").classList.toggle("hidden", step !== "account");
+      document.getElementById("wizard-subtitle").textContent = step === "provider" ? "云供应商" : "帐户设置";
+      if (step === "account") {
+        connectionForm.name.value ||= state.selectedProvider;
+      }
+    }
+
+    function openConnectionWizard() {
+      connectionForm.reset();
+      providerSearch.value = "";
+      state.selectedProvider = "WebDAV";
+      renderProviderList();
+      setWizardStep("provider");
+      openModal(connectionModal);
+    }
+
+    function openTaskEditor(mode) {
+      state.taskFormMode = mode;
+      const connection = selectedConnection();
+      const task = selectedTask();
+      taskForm.reset();
+      if (mode === "edit" && task) {
+        taskForm.id.value = task.id;
+        taskForm.name.value = task.name;
+        taskForm.connection_id.value = task.connection_id;
+        taskForm.direction.value = task.direction;
+        taskForm.local_path.value = task.local_path;
+        taskForm.remote_path.value = task.remote_path;
+      } else {
+        taskForm.connection_id.value = connection?.id || "";
+        taskForm.direction.value = "upload";
+      }
+      document.getElementById("task-modal-title").textContent = mode === "edit" ? "编辑任务" : "新建任务";
+      openModal(taskModal);
+    }
+
+    async function loadTaskDetails(tasks) {
+      await Promise.all(tasks.map(async (task) => {
+        try {
+          const [runtime, events] = await Promise.all([
+            request(`/api/v1/tasks/${encodeURIComponent(task.id)}/runtime`),
+            request(`/api/v1/tasks/${encodeURIComponent(task.id)}/events?limit=20`),
+          ]);
+          state.taskDetails.set(task.id, { runtime, events });
+        } catch (_) {
+          state.taskDetails.set(task.id, { runtime: null, events: [] });
+        }
+      }));
+    }
+
+    async function refreshAll() {
+      const [connections, tasks, metrics] = await Promise.all([
+        request("/api/v1/connections"),
+        request("/api/v1/tasks"),
+        request("/api/v1/metrics").catch(() => null),
+      ]);
+      state.connections = connections || [];
+      state.tasks = tasks || [];
+      if (!state.selectedConnectionID && state.connections[0]) state.selectedConnectionID = state.connections[0].id;
+      if (!state.connections.some((item) => item.id === state.selectedConnectionID)) state.selectedConnectionID = state.connections[0]?.id || "";
+      const scopedTasks = tasksForConnection();
+      if (!state.selectedTaskID && scopedTasks[0]) state.selectedTaskID = scopedTasks[0].id;
+      if (!state.tasks.some((item) => item.id === state.selectedTaskID)) state.selectedTaskID = scopedTasks[0]?.id || "";
+      state.metrics = metrics;
+      await loadTaskDetails(state.tasks);
+      renderAll();
+    }
+
+    function renderAll() {
+      renderConnectionTree();
+      renderOverview();
+      renderTaskTable();
+      renderSchedule();
+      renderConnectionSettings();
+      renderLogs();
+    }
+
+    async function submitJSON(path, payload, method = "POST") {
+      return request(path, { method, body: JSON.stringify(payload) });
+    }
+
+    async function updateTaskAction(action) {
+      const task = selectedTask();
+      if (!task) return;
+      await request(`/api/v1/tasks/${encodeURIComponent(task.id)}/${action}`, { method: "POST" });
+      showFlash(`任务 ${task.name} 已${action === "start" ? "启动" : action === "pause" ? "暂停" : action === "stop" ? "停止" : "更新"}。`);
+      await refreshAll();
+    }
+
+    document.querySelectorAll(".tab").forEach((node) => {
+      node.addEventListener("click", () => setActiveTab(node.dataset.tab));
+    });
+
+    connectionTree.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-select-connection]");
+      if (!button) return;
+      state.selectedConnectionID = button.dataset.selectConnection;
+      state.selectedTaskID = tasksForConnection()[0]?.id || "";
+      state.selectedLogIndex = -1;
+      renderAll();
+    });
+
+    taskTableBody.addEventListener("click", (event) => {
+      const row = event.target.closest("[data-select-task]");
+      if (!row) return;
+      state.selectedTaskID = row.dataset.selectTask;
+      renderTaskTable();
+    });
+
+    logsTableBody.addEventListener("click", (event) => {
+      const row = event.target.closest("[data-select-log]");
+      if (!row) return;
+      state.selectedLogIndex = Number(row.dataset.selectLog);
+      renderLogs();
+    });
+
+    document.getElementById("task-search").addEventListener("input", renderTaskTable);
+    document.getElementById("log-search").addEventListener("input", () => {
+      state.selectedLogIndex = -1;
+      renderLogs();
+    });
+
+    document.getElementById("toolbar-add").addEventListener("click", openConnectionWizard);
+    document.getElementById("open-connection-modal").addEventListener("click", openConnectionWizard);
+    document.getElementById("toolbar-settings").addEventListener("click", () => openModal(globalSettingsModal));
+    document.getElementById("open-global-settings").addEventListener("click", () => openModal(globalSettingsModal));
+    document.getElementById("close-connection-wizard").addEventListener("click", () => closeModal(connectionModal));
+    document.getElementById("close-task-modal").addEventListener("click", () => closeModal(taskModal));
+    document.getElementById("cancel-task-modal").addEventListener("click", () => closeModal(taskModal));
+    document.getElementById("close-global-settings").addEventListener("click", () => closeModal(globalSettingsModal));
+    document.getElementById("cancel-global-settings").addEventListener("click", () => closeModal(globalSettingsModal));
+    document.getElementById("open-task-modal").addEventListener("click", () => openTaskEditor("create"));
+    document.getElementById("edit-task").addEventListener("click", () => openTaskEditor("edit"));
+
+    document.getElementById("open-task").addEventListener("click", () => {
+      const task = selectedTask();
+      if (!task) return;
+      document.getElementById("open-task-result").textContent = `${task.local_path} ⇄ ${task.remote_path}`;
+      showFlash("已在应用层定位当前任务路径。");
+    });
+
+    document.getElementById("delete-task").addEventListener("click", async () => {
+      const task = selectedTask();
+      if (!task) return;
+      if (!window.confirm(`确定删除任务「${task.name}」吗？`)) return;
+      await request(`/api/v1/tasks/${encodeURIComponent(task.id)}`, { method: "DELETE" });
+      showFlash(`任务 ${task.name} 已删除。`);
+      state.selectedTaskID = "";
+      await refreshAll();
+    });
+
+    document.getElementById("task-start").addEventListener("click", () => updateTaskAction("start"));
+    document.getElementById("task-pause").addEventListener("click", () => updateTaskAction("pause"));
+    document.getElementById("task-stop").addEventListener("click", () => updateTaskAction("stop"));
+    document.getElementById("task-retry").addEventListener("click", async () => {
+      const task = selectedTask();
+      if (!task) return;
+      await request(`/api/v1/tasks/${encodeURIComponent(task.id)}/retry`, { method: "POST" });
+      showFlash(`任务 ${task.name} 已发起失败重试。`);
+      await refreshAll();
+    });
+
+    document.getElementById("open-log-entry").addEventListener("click", () => {
+      const row = logsForConnection()[state.selectedLogIndex];
+      if (!row) return;
+      showFlash(`已打开日志条目: ${row.name}`);
+    });
+
+    document.getElementById("advanced-log-search").addEventListener("click", () => {
+      showFlash("当前版本保留高级搜索入口，尚未接入更多筛选条件。");
+    });
+
+    document.getElementById("manage-trigger").addEventListener("click", () => {
+      document.getElementById("manage-menu").classList.toggle("show");
+    });
+
+    document.getElementById("pause-connection").addEventListener("click", async () => {
+      const tasks = tasksForConnection();
+      await Promise.all(tasks.map((task) => request(`/api/v1/tasks/${encodeURIComponent(task.id)}/pause`, { method: "POST" }).catch(() => null)));
+      document.getElementById("manage-menu").classList.remove("show");
+      showFlash("当前连接下的任务已尝试暂停。");
+      await refreshAll();
+    });
+
+    document.getElementById("unlink-connection").addEventListener("click", async () => {
+      const connection = selectedConnection();
+      if (!connection) return;
+      if (!window.confirm(`确定取消链接「${connection.name}」吗？`)) return;
+      await request(`/api/v1/connections/${encodeURIComponent(connection.id)}`, { method: "DELETE" });
+      document.getElementById("manage-menu").classList.remove("show");
+      showFlash(`连接 ${connection.name} 已取消链接。`);
+      state.selectedConnectionID = "";
+      await refreshAll();
+    });
+
+    providerSearch.addEventListener("input", renderProviderList);
+    providerGrid.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-provider]");
+      if (!button) return;
+      state.selectedProvider = button.dataset.provider;
+      renderProviderList();
+    });
+
+    document.getElementById("wizard-next").addEventListener("click", () => {
+      connectionForm.name.value ||= state.selectedProvider;
+      setWizardStep("account");
+    });
+    document.getElementById("wizard-back").addEventListener("click", () => setWizardStep("provider"));
+
+    document.getElementById("wizard-submit").addEventListener("click", async () => {
+      await submitJSON("/api/v1/connections", {
+        id: connectionForm.id.value.trim(),
+        name: connectionForm.name.value.trim() || state.selectedProvider,
+        endpoint: connectionForm.endpoint.value.trim(),
+        username: connectionForm.username.value.trim(),
+        password: connectionForm.password.value,
+        root_path: connectionForm.root_path.value.trim() || "/",
+        tls_mode: connectionForm.tls_mode.value,
+        timeout_sec: Number(connectionForm.timeout_sec.value || 30),
+        status: "active",
+      });
+      closeModal(connectionModal);
+      showFlash(`连接 ${connectionForm.name.value || state.selectedProvider} 已创建。`);
+      await refreshAll();
+    });
+
+    document.getElementById("submit-task-modal").addEventListener("click", async () => {
+      const payload = {
+        id: taskForm.id.value.trim(),
+        name: taskForm.name.value.trim(),
+        connection_id: taskForm.connection_id.value.trim(),
+        direction: taskForm.direction.value,
+        local_path: taskForm.local_path.value.trim(),
+        remote_path: taskForm.remote_path.value.trim(),
+      };
+      if (state.taskFormMode === "edit") {
+        await submitJSON(`/api/v1/tasks/${encodeURIComponent(payload.id)}`, payload, "PUT");
+        showFlash(`任务 ${payload.name} 已更新。`);
+      } else {
+        await submitJSON("/api/v1/tasks", payload);
+        showFlash(`任务 ${payload.name} 已创建。`);
+      }
+      closeModal(taskModal);
+      await refreshAll();
+    });
+
+    connectionSettingsForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const connection = selectedConnection();
+      if (!connection) return;
+      state.connectionPrefs[connection.id] = {
+        name: connectionSettingsForm.name.value.trim(),
+        poll_interval_sec: Number(connectionSettingsForm.poll_interval_sec.value || 60),
+        upload_limit_kbps: Number(connectionSettingsForm.upload_limit_kbps.value || 0),
+        download_limit_kbps: Number(connectionSettingsForm.download_limit_kbps.value || 0),
+      };
+      await submitJSON(`/api/v1/connections/${encodeURIComponent(connection.id)}`, {
+        name: connectionSettingsForm.name.value.trim(),
+        endpoint: connection.endpoint,
+        username: connection.username,
+        root_path: connection.root_path,
+        tls_mode: connection.tls_mode,
+        timeout_sec: connection.timeout_sec,
+        status: connection.status,
+      }, "PUT");
+      showFlash("连接设置已应用。");
+      await refreshAll();
+    });
+
+    document.getElementById("settings-reset").addEventListener("click", renderConnectionSettings);
+
+    document.getElementById("schedule-enabled").addEventListener("change", (event) => {
+      const schedule = ensureSchedule(selectedConnection()?.id);
+      if (!schedule) return;
+      schedule.enabled = event.target.checked;
+      renderSchedule();
+    });
+
+    scheduleMatrix.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-slot]");
+      if (!button) return;
+      const schedule = ensureSchedule(selectedConnection()?.id);
+      if (!schedule?.enabled) return;
+      const [day, hour] = button.dataset.slot.split(":").map(Number);
+      schedule.slots[day][hour] = !schedule.slots[day][hour];
+      renderSchedule();
+    });
+
+    document.getElementById("schedule-pause").addEventListener("click", () => {
+      const schedule = ensureSchedule(selectedConnection()?.id);
+      if (!schedule) return;
+      schedule.mode = "pause";
+      showFlash("已切换为暂停模式。");
+    });
+    document.getElementById("schedule-run").addEventListener("click", () => {
+      const schedule = ensureSchedule(selectedConnection()?.id);
+      if (!schedule) return;
+      schedule.mode = "run";
+      showFlash("已切换为运行模式。");
+    });
+    document.getElementById("schedule-reset").addEventListener("click", () => {
+      const connection = selectedConnection();
+      if (!connection) return;
+      state.schedule[connection.id] = { enabled: false, mode: "run", slots: Array.from({ length: 7 }, () => Array(24).fill(false)) };
+      renderSchedule();
+      showFlash("计划已重置。");
+    });
+    document.getElementById("schedule-apply").addEventListener("click", () => {
+      showFlash("计划设置已在前端应用层保存。");
+    });
+
+    document.getElementById("save-global-settings").addEventListener("click", () => {
+      state.globalSettings = Object.fromEntries(new FormData(globalSettingsForm).entries());
+      closeModal(globalSettingsModal);
+      showFlash("Cloud Sync 设置已保存到前端会话。");
+    });
+
+    [connectionModal, taskModal, globalSettingsModal].forEach((modal) => {
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) closeModal(modal);
+      });
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".menu-anchor")) {
+        document.getElementById("manage-menu").classList.remove("show");
+      }
+    });
+
+    renderProviderList();
+    renderSchedule();
+    refreshAll().catch((error) => {
+      showFlash(error.message, "error");
+      renderAll();
+    });
+  </script>
+</body>
+</html>

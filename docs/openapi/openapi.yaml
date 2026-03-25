@@ -237,6 +237,40 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/v1/tasks/{taskID}/events:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    get:
+      summary: List task events timeline
+      responses:
+        "200":
+          description: Task events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskEvent"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskID}/conflicts:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    get:
+      summary: List retained task conflict history
+      responses:
+        "200":
+          description: Conflict history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConflictRecord"
+        "404":
+          $ref: "#/components/responses/Error"
+
   /api/v1/tasks/{taskID}/retry:
     parameters:
       - $ref: "#/components/parameters/TaskID"
@@ -269,6 +303,34 @@ paths:
           $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
+
+  /api/v1/tasks/{taskID}/conflicts:
+    parameters:
+      - $ref: "#/components/parameters/TaskID"
+    get:
+      summary: List conflict history for a task
+      responses:
+        "200":
+          description: Conflict records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConflictRecord"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/v1/metrics:
+    get:
+      summary: Get aggregated service metrics
+      responses:
+        "200":
+          description: Metrics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskMetrics"
 
 components:
   parameters:
@@ -413,7 +475,27 @@ components:
           type: string
         direction:
           type: string
+        poll_interval_sec:
+          type: integer
+        conflict_policy:
+          type: string
+        delete_policy:
+          type: string
+        empty_dir_policy:
+          type: string
+        bandwidth_limit_kbps:
+          type: integer
+        max_workers:
+          type: integer
+        encryption_enabled:
+          type: boolean
+        hash_mode:
+          type: string
         status:
+          type: string
+        desired_state:
+          type: string
+        last_error:
           type: string
         created_at:
           type: string
@@ -438,6 +520,22 @@ components:
           type: string
         direction:
           type: string
+        poll_interval_sec:
+          type: integer
+        conflict_policy:
+          type: string
+        delete_policy:
+          type: string
+        empty_dir_policy:
+          type: string
+        bandwidth_limit_kbps:
+          type: integer
+        max_workers:
+          type: integer
+        encryption_enabled:
+          type: boolean
+        hash_mode:
+          type: string
       required: [id, name, connection_id, local_path, remote_path, direction]
 
     UpdateTaskRequest:
@@ -452,6 +550,22 @@ components:
         remote_path:
           type: string
         direction:
+          type: string
+        poll_interval_sec:
+          type: integer
+        conflict_policy:
+          type: string
+        delete_policy:
+          type: string
+        empty_dir_policy:
+          type: string
+        bandwidth_limit_kbps:
+          type: integer
+        max_workers:
+          type: integer
+        encryption_enabled:
+          type: boolean
+        hash_mode:
           type: string
 
     FailureRecord:
@@ -482,16 +596,67 @@ components:
         resolved_at:
           type: string
           format: date-time
+      required: [id, task_id, path, op_type, error_code, error_message, retryable, first_failed_at, last_failed_at, attempt_count]
+
+    TaskEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        event_type:
+          type: string
+        level:
+          type: string
+        message:
+          type: string
+        details_json:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required: [id, task_id, event_type, level, message, details_json, created_at]
+
+    ConflictRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        relative_path:
+          type: string
+        local_conflict_path:
+          type: string
+        remote_conflict_path:
+          type: string
+        policy:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+      required: [id, task_id, relative_path, policy, detected_at]
 
     OperationQueueItem:
       type: object
       properties:
         id:
           type: string
+        task_id:
+          type: string
         op_type:
           type: string
         target_path:
           type: string
+        src_side:
+          type: string
+        reason:
+          type: string
+        payload_json:
+          type: string
+        priority:
+          type: integer
         status:
           type: string
         attempt_count:
@@ -501,9 +666,13 @@ components:
           format: date-time
         last_error:
           type: string
+        created_at:
+          type: string
+          format: date-time
         updated_at:
           type: string
           format: date-time
+      required: [id, op_type, target_path, status, attempt_count, updated_at]
 
     TaskRuntimeState:
       type: object
@@ -529,14 +698,19 @@ components:
           type: integer
         last_error:
           type: string
+        checkpoint_json:
+          type: string
         updated_at:
           type: string
           format: date-time
+      required: [phase, retry_streak, checkpoint_json, updated_at]
 
     TaskQueueSummary:
       type: object
       properties:
         total:
+          type: integer
+        queued:
           type: integer
         pending:
           type: integer
@@ -544,6 +718,11 @@ components:
           type: integer
         retry_wait:
           type: integer
+        succeeded:
+          type: integer
+        failed:
+          type: integer
+      required: [total, queued, pending, executing, retry_wait, succeeded, failed]
 
     TaskFailureSummary:
       type: object
@@ -554,6 +733,50 @@ components:
           type: integer
         open:
           type: integer
+      required: [total, resolved, open]
+
+    QueueMetrics:
+      type: object
+      properties:
+        total:
+          type: integer
+        queued:
+          type: integer
+        executing:
+          type: integer
+        retry_wait:
+          type: integer
+        succeeded:
+          type: integer
+        failed:
+          type: integer
+      required: [total, queued, executing, retry_wait, succeeded, failed]
+
+    FailureMetrics:
+      type: object
+      properties:
+        total:
+          type: integer
+        open:
+          type: integer
+        resolved:
+          type: integer
+        retryable_open:
+          type: integer
+      required: [total, open, resolved, retryable_open]
+
+    TaskMetrics:
+      type: object
+      properties:
+        task_states:
+          type: object
+          additionalProperties:
+            type: integer
+        queue:
+          $ref: "#/components/schemas/QueueMetrics"
+        failures:
+          $ref: "#/components/schemas/FailureMetrics"
+      required: [task_states, queue, failures]
 
     TaskRuntimeView:
       type: object
@@ -574,3 +797,24 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FailureRecord"
+      required: [task, runtime, queue_summary, failure_summary, queue, failures]
+
+    ConflictRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        task_id:
+          type: string
+        relative_path:
+          type: string
+        local_conflict_path:
+          type: string
+        remote_conflict_path:
+          type: string
+        policy:
+          type: string
+        detected_at:
+          type: string
+          format: date-time
+      required: [id, task_id, relative_path, policy, detected_at]

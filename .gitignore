@@ -17,3 +17,5 @@ coverage.out
 
 # macOS
 .DS_Store
+
+test

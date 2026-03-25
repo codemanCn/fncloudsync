@@ -20,7 +20,7 @@ func NewTaskRuntimeRepository(db *sql.DB) *TaskRuntimeRepository {
 func (r *TaskRuntimeRepository) GetByTaskID(ctx context.Context, taskID string) (domain.TaskRuntimeState, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT task_id, phase, last_local_scan_at, last_remote_scan_at, last_reconcile_at, last_success_at,
-		       backoff_until, retry_streak, last_error, updated_at
+		       backoff_until, retry_streak, last_error, checkpoint_json, updated_at
 		FROM task_runtime_state
 		WHERE task_id = ?
 	`, taskID)
@@ -42,6 +42,7 @@ func (r *TaskRuntimeRepository) GetByTaskID(ctx context.Context, taskID string) 
 		&backoffUntil,
 		&state.RetryStreak,
 		&state.LastError,
+		&state.CheckpointJSON,
 		&updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -68,8 +69,8 @@ func (r *TaskRuntimeRepository) Upsert(ctx context.Context, state domain.TaskRun
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO task_runtime_state (
 			task_id, phase, last_local_scan_at, last_remote_scan_at, last_reconcile_at, last_success_at,
-			backoff_until, retry_streak, last_error, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			backoff_until, retry_streak, last_error, checkpoint_json, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_id) DO UPDATE SET
 			phase = excluded.phase,
 			last_local_scan_at = excluded.last_local_scan_at,
@@ -79,6 +80,7 @@ func (r *TaskRuntimeRepository) Upsert(ctx context.Context, state domain.TaskRun
 			backoff_until = excluded.backoff_until,
 			retry_streak = excluded.retry_streak,
 			last_error = excluded.last_error,
+			checkpoint_json = excluded.checkpoint_json,
 			updated_at = excluded.updated_at
 	`,
 		state.TaskID,
@@ -90,6 +92,7 @@ func (r *TaskRuntimeRepository) Upsert(ctx context.Context, state domain.TaskRun
 		formatOptionalTimestamp(state.BackoffUntil),
 		state.RetryStreak,
 		state.LastError,
+		state.CheckpointJSON,
 		state.UpdatedAt.UTC().Format(timestampLayout),
 	)
 	return mapSQLError(err)

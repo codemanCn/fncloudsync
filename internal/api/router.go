@@ -31,11 +31,15 @@ type taskCreator interface {
 	RetryFailures(context.Context, string) (int, error)
 	RetryFailureByID(context.Context, string, string) (int, error)
 	GetRuntimeView(context.Context, string) (domain.TaskRuntimeView, error)
+	GetMetrics(context.Context) (domain.TaskMetrics, error)
+	ListEvents(context.Context, string, int) ([]domain.TaskEvent, error)
+	ListConflicts(context.Context, string) ([]domain.ConflictRecord, error)
 }
 
 func NewRouter(connectionService connectionCreator, taskService taskCreator) http.Handler {
 	router := chi.NewRouter()
 
+	registerStaticRoutes(router)
 	router.Get("/healthz", handlers.Health)
 
 	router.Route("/api/v1", func(r chi.Router) {
@@ -48,6 +52,7 @@ func NewRouter(connectionService connectionCreator, taskService taskCreator) htt
 			r.Post("/connections/{connectionID}/test", handlers.TestConnection(connectionService))
 		}
 		if taskService != nil {
+			r.Get("/metrics", handlers.GetMetrics(taskService))
 			r.Post("/tasks", handlers.CreateTask(taskService))
 			r.Get("/tasks", handlers.ListTasks(taskService))
 			r.Get("/tasks/{taskID}", handlers.GetTask(taskService))
@@ -57,9 +62,11 @@ func NewRouter(connectionService connectionCreator, taskService taskCreator) htt
 			r.Post("/tasks/{taskID}/pause", handlers.PauseTask(taskService))
 			r.Post("/tasks/{taskID}/stop", handlers.StopTask(taskService))
 			r.Get("/tasks/{taskID}/runtime", handlers.GetTaskRuntime(taskService))
+			r.Get("/tasks/{taskID}/events", handlers.ListTaskEvents(taskService))
 			r.Get("/tasks/{taskID}/failures", handlers.ListTaskFailures(taskService))
 			r.Post("/tasks/{taskID}/retry", handlers.RetryTaskFailures(taskService))
 			r.Post("/tasks/{taskID}/failures/{failureID}/retry", handlers.RetryTaskFailure(taskService))
+			r.Get("/tasks/{taskID}/conflicts", handlers.ListTaskConflicts(taskService))
 		}
 	})
 

@@ -2,6 +2,8 @@ package scheduler_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,12 +17,14 @@ func TestSchedulerRunsDueRunningTasks(t *testing.T) {
 	tasks := &stubTaskRunner{
 		items: []domain.Task{
 			{ID: "task-1", Status: domain.TaskStatusRunning, PollIntervalSec: 1},
-			{ID: "task-2", Status: domain.TaskStatusPaused, PollIntervalSec: 1},
+			{ID: "task-2", Status: domain.TaskStatusDegraded, PollIntervalSec: 1},
+			{ID: "task-3", Status: domain.TaskStatusPaused, PollIntervalSec: 1},
 		},
 	}
 	runtime := &stubRuntimeReader{
 		states: map[string]domain.TaskRuntimeState{
 			"task-1": {TaskID: "task-1", LastReconcileAt: time.Now().UTC().Add(-2 * time.Second)},
+			"task-2": {TaskID: "task-2", LastReconcileAt: time.Now().UTC().Add(-2 * time.Second)},
 		},
 	}
 
@@ -32,8 +36,8 @@ func TestSchedulerRunsDueRunningTasks(t *testing.T) {
 
 	s.Run(ctx)
 
-	if len(tasks.executed) == 0 || tasks.executed[0] != "task-1" {
-		t.Fatalf("executed = %v, want task-1", tasks.executed)
+	if !contains(tasks.executed, "task-1") || !contains(tasks.executed, "task-2") {
+		t.Fatalf("executed = %v, want task-1 and task-2 at least once", tasks.executed)
 	}
 }
 
@@ -85,6 +89,43 @@ func TestSchedulerReschedulesFailedQueueItems(t *testing.T) {
 	}
 }
 
+func TestSchedulerLogsTaskAndQueueExecution(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	tasks := &stubTaskRunner{
+		items: []domain.Task{
+			{ID: "task-1", Status: domain.TaskStatusRunning, PollIntervalSec: 1},
+		},
+	}
+	runtime := &stubRuntimeReader{
+		states: map[string]domain.TaskRuntimeState{
+			"task-1": {TaskID: "task-1", LastReconcileAt: now.Add(-2 * time.Second)},
+		},
+	}
+	queue := &stubOperationQueue{
+		items: []domain.OperationQueueItem{
+			{ID: "op-1", TaskID: "task-queued", OpType: string(domain.SyncActionUploadFile), NextAttemptAt: now.Add(-time.Second)},
+		},
+	}
+	logger := &stubSchedulerLogger{}
+
+	s := scheduler.New(tasks, runtime, queue, time.Hour)
+	s.SetLogger(logger)
+	s.Tick(context.Background())
+
+	if len(logger.lines) == 0 {
+		t.Fatal("logger lines empty, want scheduler logs")
+	}
+	joined := strings.Join(logger.lines, "\n")
+	if !strings.Contains(joined, "task_id=task-1") {
+		t.Fatalf("logs = %q, want task_id log", joined)
+	}
+	if !strings.Contains(joined, "queue_op_id=op-1") {
+		t.Fatalf("logs = %q, want queue_op_id log", joined)
+	}
+}
+
 type stubTaskRunner struct {
 	items       []domain.Task
 	executed    []string
@@ -122,6 +163,15 @@ type stubOperationQueue struct {
 	items        []domain.OperationQueueItem
 	dequeued     []string
 	rescheduled  []domain.OperationQueueItem
+	failed       []string
+}
+
+type stubSchedulerLogger struct {
+	lines []string
+}
+
+func (s *stubSchedulerLogger) Printf(format string, args ...any) {
+	s.lines = append(s.lines, fmt.Sprintf(format, args...))
 }
 
 func (s *stubOperationQueue) ListDue(ctx context.Context, now time.Time, limit int) ([]domain.OperationQueueItem, error) {
@@ -139,4 +189,18 @@ func (s *stubOperationQueue) Dequeue(ctx context.Context, id string) error {
 func (s *stubOperationQueue) Reschedule(ctx context.Context, item domain.OperationQueueItem) error {
 	s.rescheduled = append(s.rescheduled, item)
 	return nil
+}
+
+func (s *stubOperationQueue) MarkFailed(ctx context.Context, id string, lastError string) error {
+	s.failed = append(s.failed, id)
+	return nil
+}
+
+func contains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }

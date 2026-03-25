@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -244,9 +245,9 @@ func TestGetTaskRuntimeReturnsOK(t *testing.T) {
 
 	router := api.NewRouter(nil, &stubTaskService{
 		runtimeViewResult: domain.TaskRuntimeView{
-			Task: domain.Task{ID: "task-1", Status: domain.TaskStatusRunning},
-			Runtime: domain.TaskRuntimeState{Phase: "idle"},
-			QueueSummary: domain.TaskQueueSummary{Total: 1, Pending: 1},
+			Task:           domain.Task{ID: "task-1", Status: domain.TaskStatusRunning},
+			Runtime:        domain.TaskRuntimeState{Phase: "idle", CheckpointJSON: `{"remote":{"cursor":"etag-1"}}`},
+			QueueSummary:   domain.TaskQueueSummary{Total: 2, Queued: 1, Succeeded: 1},
 			FailureSummary: domain.TaskFailureSummary{Total: 1, Open: 1},
 		},
 	})
@@ -258,32 +259,116 @@ func TestGetTaskRuntimeReturnsOK(t *testing.T) {
 	if got, want := recorder.Code, http.StatusOK; got != want {
 		t.Fatalf("status = %d, want %d", got, want)
 	}
+	if !strings.Contains(recorder.Body.String(), `"checkpoint_json":"{\"remote\":{\"cursor\":\"etag-1\"}}"`) {
+		t.Fatalf("body = %s, want checkpoint_json", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"queued":1`) || !strings.Contains(recorder.Body.String(), `"succeeded":1`) {
+		t.Fatalf("body = %s, want richer queue summary counts", recorder.Body.String())
+	}
+}
+
+func TestGetMetricsReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		metricsResult: domain.TaskMetrics{
+			TaskStates: map[string]int{"running": 2, "degraded": 1},
+			Queue:      domain.QueueMetrics{Total: 3, RetryWait: 1},
+			Failures:   domain.FailureMetrics{Total: 2, RetryableOpen: 1},
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/metrics", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if !strings.Contains(recorder.Body.String(), `"running":2`) || !strings.Contains(recorder.Body.String(), `"retryable_open":1`) {
+		t.Fatalf("body = %s, want aggregated metrics payload", recorder.Body.String())
+	}
+}
+
+func TestListTaskEventsReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		eventsResult: []domain.TaskEvent{
+			{ID: "event-1", TaskID: "task-1", EventType: "task_started"},
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/task-1/events", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if !strings.Contains(recorder.Body.String(), `"event_type":"task_started"`) {
+		t.Fatalf("body = %s, want task_started event", recorder.Body.String())
+	}
+}
+
+func TestListTaskConflictsReturnsOK(t *testing.T) {
+	t.Parallel()
+
+	router := api.NewRouter(nil, &stubTaskService{
+		conflictsResult: []domain.ConflictRecord{
+			{
+				ID:                 "conflict-1",
+				TaskID:             "task-1",
+				RelativePath:       "docs/report.txt",
+				LocalConflictPath:  "docs/report (local copy).txt",
+				RemoteConflictPath: "docs/report (remote copy).txt",
+				Policy:             "keep_both",
+			},
+		},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/tasks/task-1/conflicts", nil)
+	recorder := httptest.NewRecorder()
+
+	router.ServeHTTP(recorder, request)
+
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if !strings.Contains(recorder.Body.String(), `"relative_path":"docs/report.txt"`) {
+		t.Fatalf("body = %s, want relative_path payload", recorder.Body.String())
+	}
 }
 
 type stubTaskService struct {
-	createResult domain.Task
-	createErr    error
-	listResult   []domain.Task
-	listErr      error
-	getResult    domain.Task
-	getErr       error
-	updateResult domain.Task
-	updateErr    error
-	deleteErr    error
-	startResult  domain.Task
-	startErr     error
-	pauseResult  domain.Task
-	pauseErr     error
-	stopResult   domain.Task
-	stopErr      error
-	failuresResult []domain.FailureRecord
-	failuresErr error
-	retryCount int
-	retryErr error
-	retryByIDCount int
-	retryByIDErr error
+	createResult      domain.Task
+	createErr         error
+	listResult        []domain.Task
+	listErr           error
+	getResult         domain.Task
+	getErr            error
+	updateResult      domain.Task
+	updateErr         error
+	deleteErr         error
+	startResult       domain.Task
+	startErr          error
+	pauseResult       domain.Task
+	pauseErr          error
+	stopResult        domain.Task
+	stopErr           error
+	failuresResult    []domain.FailureRecord
+	failuresErr       error
+	retryCount        int
+	retryErr          error
+	retryByIDCount    int
+	retryByIDErr      error
 	runtimeViewResult domain.TaskRuntimeView
-	runtimeViewErr error
+	runtimeViewErr    error
+	metricsResult     domain.TaskMetrics
+	metricsErr        error
+	eventsResult      []domain.TaskEvent
+	eventsErr         error
+	conflictsResult   []domain.ConflictRecord
+	conflictsErr      error
 }
 
 func (s *stubTaskService) Create(_ context.Context, _ domain.Task) (domain.Task, error) {
@@ -335,4 +420,16 @@ func (s *stubTaskService) RetryFailureByID(_ context.Context, _, _ string) (int,
 
 func (s *stubTaskService) GetRuntimeView(_ context.Context, _ string) (domain.TaskRuntimeView, error) {
 	return s.runtimeViewResult, s.runtimeViewErr
+}
+
+func (s *stubTaskService) GetMetrics(_ context.Context) (domain.TaskMetrics, error) {
+	return s.metricsResult, s.metricsErr
+}
+
+func (s *stubTaskService) ListEvents(_ context.Context, _ string, _ int) ([]domain.TaskEvent, error) {
+	return s.eventsResult, s.eventsErr
+}
+
+func (s *stubTaskService) ListConflicts(_ context.Context, _ string) ([]domain.ConflictRecord, error) {
+	return s.conflictsResult, s.conflictsErr
 }

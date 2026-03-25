@@ -15,6 +15,7 @@ import (
 	"github.com/xiaoxuesen/fn-cloudsync/internal/connector/webdav"
 	appcrypto "github.com/xiaoxuesen/fn-cloudsync/internal/crypto"
 	"github.com/xiaoxuesen/fn-cloudsync/internal/obs"
+	"github.com/xiaoxuesen/fn-cloudsync/internal/poller"
 	"github.com/xiaoxuesen/fn-cloudsync/internal/scheduler"
 	sqlitestore "github.com/xiaoxuesen/fn-cloudsync/internal/store/sqlite"
 	appsync "github.com/xiaoxuesen/fn-cloudsync/internal/sync"
@@ -55,21 +56,30 @@ func run() error {
 		return err
 	}
 	taskService := app.NewTaskService(sqlitestore.NewTaskRepository(db))
+	taskService.SetLogger(logger)
 	taskService.SetConnectionRepository(sqlitestore.NewConnectionRepository(db))
 	taskService.SetSecrets(secrets)
 	fileIndexRepo := sqlitestore.NewFileIndexRepository(db)
+	conflictHistoryRepo := sqlitestore.NewConflictHistoryRepository(db)
 	baselineRunner := appsync.NewBaselineRunner(webdav.NewClient())
 	baselineRunner.SetFileIndexRepository(fileIndexRepo)
+	baselineRunner.SetConflictHistoryRepository(conflictHistoryRepo)
 	taskService.SetBaselineRunner(baselineRunner)
+	taskService.SetConflictHistoryRepository(conflictHistoryRepo)
 	runtimeRepo := sqlitestore.NewTaskRuntimeRepository(db)
 	failureRepo := sqlitestore.NewFailureRecordRepository(db)
 	queueRepo := sqlitestore.NewOperationQueueRepository(db)
 	taskService.SetRuntimeRepository(runtimeRepo)
 	taskService.SetFailureRepository(failureRepo)
 	taskService.SetOperationQueueRepository(queueRepo)
+	taskService.SetFileIndexRepository(fileIndexRepo)
 
 	bgScheduler := scheduler.New(taskService, runtimeRepo, queueRepo, time.Second)
+	remotePoller := poller.New(taskService, runtimeRepo, time.Second)
 	localWatcher := watcher.New(taskService, time.Second, 500*time.Millisecond)
+	bgScheduler.SetLogger(logger)
+	remotePoller.SetLogger(logger)
+	localWatcher.SetLogger(logger)
 
 	server := &http.Server{
 		Addr:    cfg.Addr,
@@ -81,6 +91,10 @@ func run() error {
 
 	go func() {
 		bgScheduler.Run(ctx)
+	}()
+
+	go func() {
+		remotePoller.Run(ctx)
 	}()
 
 	go func() {

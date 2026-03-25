@@ -16,11 +16,13 @@ const (
 )
 
 const (
-	TaskStatusCreated TaskStatus = "created"
-	TaskStatusPaused  TaskStatus = "paused"
-	TaskStatusRunning TaskStatus = "running"
-	TaskStatusFailed  TaskStatus = "failed"
-	TaskStatusStopped TaskStatus = "stopped"
+	TaskStatusCreated  TaskStatus = "created"
+	TaskStatusDegraded TaskStatus = "degraded"
+	TaskStatusPaused   TaskStatus = "paused"
+	TaskStatusRunning  TaskStatus = "running"
+	TaskStatusRetrying TaskStatus = "retrying"
+	TaskStatusFailed   TaskStatus = "failed"
+	TaskStatusStopped  TaskStatus = "stopped"
 )
 
 type Task struct {
@@ -55,6 +57,7 @@ type TaskRuntimeState struct {
 	BackoffUntil     time.Time
 	RetryStreak      int
 	LastError        string
+	CheckpointJSON   string
 	UpdatedAt        time.Time
 }
 
@@ -111,49 +114,99 @@ type FileIndexEntry struct {
 	DeletedTombstone  bool
 }
 
+type ConflictRecord struct {
+	ID                 string
+	TaskID             string
+	RelativePath       string
+	LocalConflictPath  string
+	RemoteConflictPath string
+	Policy             string
+	DetectedAt         time.Time
+}
+
+type TaskEvent struct {
+	ID          string
+	TaskID      string
+	EventType   string
+	Level       string
+	Message     string
+	DetailsJSON string
+	CreatedAt   time.Time
+}
+
 type SyncActionType string
 
 const (
-	SyncActionCreateDirLocal   SyncActionType = "CreateDirLocal"
-	SyncActionCreateDirRemote  SyncActionType = "CreateDirRemote"
-	SyncActionUploadFile       SyncActionType = "UploadFile"
-	SyncActionDownloadFile     SyncActionType = "DownloadFile"
-	SyncActionDeleteLocal      SyncActionType = "DeleteLocal"
-	SyncActionDeleteRemote     SyncActionType = "DeleteRemote"
+	SyncActionCreateDirLocal     SyncActionType = "CreateDirLocal"
+	SyncActionCreateDirRemote    SyncActionType = "CreateDirRemote"
+	SyncActionUploadFile         SyncActionType = "UploadFile"
+	SyncActionDownloadFile       SyncActionType = "DownloadFile"
+	SyncActionDeleteLocal        SyncActionType = "DeleteLocal"
+	SyncActionDeleteRemote       SyncActionType = "DeleteRemote"
+	SyncActionMoveLocal          SyncActionType = "MoveLocal"
+	SyncActionMoveRemote         SyncActionType = "MoveRemote"
 	SyncActionMoveConflictLocal  SyncActionType = "MoveConflictLocal"
 	SyncActionMoveConflictRemote SyncActionType = "MoveConflictRemote"
-	SyncActionRefreshMetadata  SyncActionType = "RefreshMetadata"
+	SyncActionRefreshMetadata    SyncActionType = "RefreshMetadata"
 )
 
 type SyncAction struct {
-	Type         SyncActionType
-	RelativePath string
-	LocalPath    string
-	RemotePath   string
-	ConflictPath string
-	IsDir        bool
+	Type               SyncActionType
+	RelativePath       string
+	SourceRelativePath string
+	LocalPath          string
+	SourceLocalPath    string
+	RemotePath         string
+	SourceRemotePath   string
+	ConflictPath       string
+	IsDir              bool
 }
 
 type TaskRuntimeView struct {
-	Task          Task
-	Runtime       TaskRuntimeState
-	Queue         []OperationQueueItem
-	Failures      []FailureRecord
-	QueueSummary  TaskQueueSummary
+	Task           Task
+	Runtime        TaskRuntimeState
+	Queue          []OperationQueueItem
+	Failures       []FailureRecord
+	QueueSummary   TaskQueueSummary
 	FailureSummary TaskFailureSummary
 }
 
 type TaskQueueSummary struct {
-	Total      int
-	Pending    int
-	Executing  int
-	RetryWait  int
+	Total     int
+	Queued    int
+	Pending   int
+	Executing int
+	RetryWait int
+	Succeeded int
+	Failed    int
 }
 
 type TaskFailureSummary struct {
+	Total    int
+	Resolved int
+	Open     int
+}
+
+type TaskMetrics struct {
+	TaskStates map[string]int
+	Queue      QueueMetrics
+	Failures   FailureMetrics
+}
+
+type QueueMetrics struct {
 	Total     int
-	Resolved  int
-	Open      int
+	Queued    int
+	Executing int
+	RetryWait int
+	Succeeded int
+	Failed    int
+}
+
+type FailureMetrics struct {
+	Total         int
+	Open          int
+	Resolved      int
+	RetryableOpen int
 }
 
 func (t *Task) ApplyDefaults() {

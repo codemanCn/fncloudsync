@@ -24,6 +24,9 @@ type taskCreator interface {
 	RetryFailures(context.Context, string) (int, error)
 	RetryFailureByID(context.Context, string, string) (int, error)
 	GetRuntimeView(context.Context, string) (domain.TaskRuntimeView, error)
+	GetMetrics(context.Context) (domain.TaskMetrics, error)
+	ListEvents(context.Context, string, int) ([]domain.TaskEvent, error)
+	ListConflicts(context.Context, string) ([]domain.ConflictRecord, error)
 }
 
 type createTaskRequest struct {
@@ -48,26 +51,36 @@ type taskResponse struct {
 }
 
 type failureResponse struct {
-	ID           string    `json:"id"`
-	TaskID       string    `json:"task_id"`
-	Path         string    `json:"path"`
-	OpType       string    `json:"op_type"`
-	ErrorCode    string    `json:"error_code"`
-	ErrorMessage string    `json:"error_message"`
-	Retryable    bool      `json:"retryable"`
+	ID            string    `json:"id"`
+	TaskID        string    `json:"task_id"`
+	Path          string    `json:"path"`
+	OpType        string    `json:"op_type"`
+	ErrorCode     string    `json:"error_code"`
+	ErrorMessage  string    `json:"error_message"`
+	Retryable     bool      `json:"retryable"`
 	FirstFailedAt time.Time `json:"first_failed_at"`
-	LastFailedAt time.Time `json:"last_failed_at"`
-	AttemptCount int       `json:"attempt_count"`
-	ResolvedAt   time.Time `json:"resolved_at"`
+	LastFailedAt  time.Time `json:"last_failed_at"`
+	AttemptCount  int       `json:"attempt_count"`
+	ResolvedAt    time.Time `json:"resolved_at"`
+}
+
+type eventResponse struct {
+	ID          string    `json:"id"`
+	TaskID      string    `json:"task_id"`
+	EventType   string    `json:"event_type"`
+	Level       string    `json:"level"`
+	Message     string    `json:"message"`
+	DetailsJSON string    `json:"details_json"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type taskRuntimeResponse struct {
-	Task           taskResponse       `json:"task"`
-	Runtime        runtimeResponse    `json:"runtime"`
-	QueueSummary   queueSummaryResponse `json:"queue_summary"`
+	Task           taskResponse           `json:"task"`
+	Runtime        runtimeResponse        `json:"runtime"`
+	QueueSummary   queueSummaryResponse   `json:"queue_summary"`
 	FailureSummary failureSummaryResponse `json:"failure_summary"`
-	Queue          []queueItemResponse `json:"queue"`
-	Failures       []failureResponse   `json:"failures"`
+	Queue          []queueItemResponse    `json:"queue"`
+	Failures       []failureResponse      `json:"failures"`
 }
 
 type runtimeResponse struct {
@@ -79,14 +92,18 @@ type runtimeResponse struct {
 	BackoffUntil     time.Time `json:"backoff_until"`
 	RetryStreak      int       `json:"retry_streak"`
 	LastError        string    `json:"last_error"`
+	CheckpointJSON   string    `json:"checkpoint_json"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type queueSummaryResponse struct {
 	Total     int `json:"total"`
+	Queued    int `json:"queued"`
 	Pending   int `json:"pending"`
 	Executing int `json:"executing"`
 	RetryWait int `json:"retry_wait"`
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
 }
 
 type failureSummaryResponse struct {
@@ -104,6 +121,28 @@ type queueItemResponse struct {
 	NextAttemptAt time.Time `json:"next_attempt_at"`
 	LastError     string    `json:"last_error"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type metricsResponse struct {
+	TaskStates map[string]int       `json:"task_states"`
+	Queue      queueMetricsResponse `json:"queue"`
+	Failures   failureMetricsResp   `json:"failures"`
+}
+
+type queueMetricsResponse struct {
+	Total     int `json:"total"`
+	Queued    int `json:"queued"`
+	Executing int `json:"executing"`
+	RetryWait int `json:"retry_wait"`
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
+}
+
+type failureMetricsResp struct {
+	Total         int `json:"total"`
+	Open          int `json:"open"`
+	Resolved      int `json:"resolved"`
+	RetryableOpen int `json:"retryable_open"`
 }
 
 func CreateTask(service taskCreator) http.HandlerFunc {
@@ -275,13 +314,17 @@ func GetTaskRuntime(service taskCreator) http.HandlerFunc {
 				BackoffUntil:     view.Runtime.BackoffUntil,
 				RetryStreak:      view.Runtime.RetryStreak,
 				LastError:        view.Runtime.LastError,
+				CheckpointJSON:   view.Runtime.CheckpointJSON,
 				UpdatedAt:        view.Runtime.UpdatedAt,
 			},
 			QueueSummary: queueSummaryResponse{
 				Total:     view.QueueSummary.Total,
+				Queued:    view.QueueSummary.Queued,
 				Pending:   view.QueueSummary.Pending,
 				Executing: view.QueueSummary.Executing,
 				RetryWait: view.QueueSummary.RetryWait,
+				Succeeded: view.QueueSummary.Succeeded,
+				Failed:    view.QueueSummary.Failed,
 			},
 			FailureSummary: failureSummaryResponse{
 				Total:    view.FailureSummary.Total,
@@ -385,6 +428,60 @@ func RetryTaskFailure(service taskCreator) http.HandlerFunc {
 	}
 }
 
+func ListTaskEvents(service taskCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		items, err := service.ListEvents(r.Context(), chi.URLParam(r, "taskID"), 100)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, domain.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			writeError(w, status, err.Error())
+			return
+		}
+		response := make([]eventResponse, 0, len(items))
+		for _, item := range items {
+			response = append(response, eventResponse{
+				ID:          item.ID,
+				TaskID:      item.TaskID,
+				EventType:   item.EventType,
+				Level:       item.Level,
+				Message:     item.Message,
+				DetailsJSON: item.DetailsJSON,
+				CreatedAt:   item.CreatedAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+func GetMetrics(service taskCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		metrics, err := service.GetMetrics(r.Context())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, metricsResponse{
+			TaskStates: metrics.TaskStates,
+			Queue: queueMetricsResponse{
+				Total:     metrics.Queue.Total,
+				Queued:    metrics.Queue.Queued,
+				Executing: metrics.Queue.Executing,
+				RetryWait: metrics.Queue.RetryWait,
+				Succeeded: metrics.Queue.Succeeded,
+				Failed:    metrics.Queue.Failed,
+			},
+			Failures: failureMetricsResp{
+				Total:         metrics.Failures.Total,
+				Open:          metrics.Failures.Open,
+				Resolved:      metrics.Failures.Resolved,
+				RetryableOpen: metrics.Failures.RetryableOpen,
+			},
+		})
+	}
+}
+
 func toTaskResponse(task domain.Task) taskResponse {
 	return taskResponse{
 		ID:           task.ID,
@@ -396,5 +493,43 @@ func toTaskResponse(task domain.Task) taskResponse {
 		Status:       string(task.Status),
 		CreatedAt:    task.CreatedAt,
 		UpdatedAt:    task.UpdatedAt,
+	}
+}
+
+type conflictResponse struct {
+	ID                 string    `json:"id"`
+	TaskID             string    `json:"task_id"`
+	RelativePath       string    `json:"relative_path"`
+	LocalConflictPath  string    `json:"local_conflict_path"`
+	RemoteConflictPath string    `json:"remote_conflict_path"`
+	Policy             string    `json:"policy"`
+	DetectedAt         time.Time `json:"detected_at"`
+}
+
+func ListTaskConflicts(service taskCreator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		items, err := service.ListConflicts(r.Context(), chi.URLParam(r, "taskID"))
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, domain.ErrNotFound) {
+				status = http.StatusNotFound
+			}
+			writeError(w, status, err.Error())
+			return
+		}
+
+		response := make([]conflictResponse, 0, len(items))
+		for _, item := range items {
+			response = append(response, conflictResponse{
+				ID:                 item.ID,
+				TaskID:             item.TaskID,
+				RelativePath:       item.RelativePath,
+				LocalConflictPath:  item.LocalConflictPath,
+				RemoteConflictPath: item.RemoteConflictPath,
+				Policy:             item.Policy,
+				DetectedAt:         item.DetectedAt,
+			})
+		}
+		writeJSON(w, http.StatusOK, response)
 	}
 }

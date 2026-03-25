@@ -19,11 +19,13 @@ type remoteFS interface {
 	List(context.Context, domain.Connection, string, string) ([]domain.RemoteEntry, error)
 	Download(context.Context, domain.Connection, string, string) (io.ReadCloser, domain.RemoteEntry, error)
 	Delete(context.Context, domain.Connection, string, string, bool) error
+	Move(context.Context, domain.Connection, string, string, string) error
 }
 
 type BaselineRunner struct {
 	remote    remoteFS
 	fileIndex fileIndexRepository
+	conflicts conflictHistoryRepository
 }
 
 type fileIndexRepository interface {
@@ -31,10 +33,15 @@ type fileIndexRepository interface {
 	Upsert(context.Context, domain.FileIndexEntry) error
 }
 
+type conflictHistoryRepository interface {
+	Create(context.Context, domain.ConflictRecord) error
+}
+
 type localEntry struct {
 	path  string
 	isDir bool
 	size  int64
+	mtime time.Time
 }
 
 func NewBaselineRunner(remote remoteFS) *BaselineRunner {
@@ -43,6 +50,10 @@ func NewBaselineRunner(remote remoteFS) *BaselineRunner {
 
 func (r *BaselineRunner) SetFileIndexRepository(repo fileIndexRepository) {
 	r.fileIndex = repo
+}
+
+func (r *BaselineRunner) SetConflictHistoryRepository(repo conflictHistoryRepository) {
+	r.conflicts = repo
 }
 
 func (r *BaselineRunner) RunOnce(ctx context.Context, task domain.Task, connection domain.Connection, password string) error {
@@ -186,6 +197,7 @@ func snapshotLocal(root string) (map[string]localEntry, error) {
 				return err
 			}
 			record.size = info.Size()
+			record.mtime = info.ModTime().UTC()
 		}
 		items[filepath.ToSlash(relPath)] = record
 		return nil
@@ -301,7 +313,7 @@ func (r *BaselineRunner) persistFileIndex(ctx context.Context, task domain.Task,
 			LastSyncDirection: string(task.Direction),
 			LastSyncAt:        now,
 			Version:           max(previous.Version+1, 1),
-			SyncState:         syncStateFor(hasLocal, hasRemote),
+			SyncState:         syncStateForEntry(hasLocal, hasRemote, previous.DeletedTombstone, false),
 			DeletedTombstone:  previous.DeletedTombstone,
 		}
 		if hasLocal {
@@ -321,6 +333,7 @@ func (r *BaselineRunner) persistFileIndex(ctx context.Context, task domain.Task,
 		if hasLocal && hasRemote {
 			item.DeletedTombstone = false
 		}
+		item.SyncState = syncStateForEntry(hasLocal, hasRemote, item.DeletedTombstone, false)
 		if err := r.fileIndex.Upsert(ctx, item); err != nil {
 			return err
 		}
@@ -394,16 +407,16 @@ func detectContentType(path string) string {
 	}
 }
 
-func conflictLocalPath(path string) string {
+func conflictLocalPath(path string, version int) string {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
-	return fmt.Sprintf("%s.remote-conflict-%d%s", base, time.Now().UTC().Unix(), ext)
+	return fmt.Sprintf("%s.remote-conflict-v%d%s", base, max(version, 1), ext)
 }
 
-func conflictRemotePath(path string) string {
+func conflictRemotePath(path string, version int) string {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
-	return fmt.Sprintf("%s.local-conflict-%d%s", base, time.Now().UTC().Unix(), ext)
+	return fmt.Sprintf("%s.local-conflict-v%d%s", base, max(version, 1), ext)
 }
 
 func shouldDeleteRemoteFromIndex(task domain.Task, previous domain.FileIndexEntry) bool {
@@ -422,12 +435,16 @@ func shouldDeleteLocalFromIndex(task domain.Task, previous domain.FileIndexEntry
 		!previous.DeletedTombstone
 }
 
-func syncStateFor(localExists, remoteExists bool) string {
+func syncStateForEntry(localExists, remoteExists, deletedTombstone, conflictFlag bool) string {
 	switch {
+	case conflictFlag:
+		return "conflicted"
 	case localExists && remoteExists:
 		return "synced"
+	case deletedTombstone:
+		return "tombstoned"
 	case localExists || remoteExists:
-		return "deleted"
+		return "pending"
 	default:
 		return "missing"
 	}

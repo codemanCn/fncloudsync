@@ -33,7 +33,7 @@ func (r *OperationQueueRepository) Enqueue(ctx context.Context, item domain.Oper
 		item.Reason,
 		item.PayloadJSON,
 		item.Priority,
-		item.Status,
+		queueStatusOrDefault(item.Status),
 		item.AttemptCount,
 		formatOptionalTimestamp(item.NextAttemptAt),
 		item.LastError,
@@ -89,7 +89,11 @@ func (r *OperationQueueRepository) ListByTaskID(ctx context.Context, taskID stri
 }
 
 func (r *OperationQueueRepository) Dequeue(ctx context.Context, id string) error {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM operation_queue WHERE id = ?`, id)
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE operation_queue
+		SET status = 'succeeded', updated_at = ?
+		WHERE id = ?
+	`, time.Now().UTC().Format(timestampLayout), id)
 	if err != nil {
 		return mapSQLError(err)
 	}
@@ -139,7 +143,7 @@ func (r *OperationQueueRepository) ListDue(ctx context.Context, now time.Time, l
 		SELECT id, task_id, op_type, target_path, src_side, reason, payload_json, priority, status,
 		       attempt_count, next_attempt_at, last_error, created_at, updated_at
 		FROM operation_queue
-		WHERE status = 'pending' AND (next_attempt_at = '' OR next_attempt_at <= ?)
+		WHERE status IN ('pending', 'queued', 'retry_wait') AND (next_attempt_at = '' OR next_attempt_at <= ?)
 		ORDER BY priority DESC, created_at ASC, id ASC
 		LIMIT %d
 	`, limit), now.UTC().Format(timestampLayout))
@@ -188,7 +192,7 @@ func (r *OperationQueueRepository) Reschedule(ctx context.Context, item domain.O
 func (r *OperationQueueRepository) ResetRetryableByTaskID(ctx context.Context, taskID string) (int, error) {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE operation_queue
-		SET status = 'pending', next_attempt_at = '', updated_at = ?
+		SET status = 'queued', next_attempt_at = '', updated_at = ?
 		WHERE task_id = ? AND status IN ('retry_wait', 'executing')
 	`, time.Now().UTC().Format(timestampLayout), taskID)
 	if err != nil {
@@ -234,9 +238,28 @@ func scanOperationQueueItem(row operationQueueScanner) (domain.OperationQueueIte
 	return item, nil
 }
 
+func (r *OperationQueueRepository) MarkFailed(ctx context.Context, id string, lastError string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE operation_queue
+		SET status = 'failed', last_error = ?, updated_at = ?
+		WHERE id = ?
+	`, lastError, time.Now().UTC().Format(timestampLayout), id)
+	if err != nil {
+		return mapSQLError(err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func queueStatusOrDefault(status string) string {
-	if status == "" {
-		return "pending"
+	if status == "" || status == "pending" {
+		return "queued"
 	}
 	return status
 }

@@ -358,8 +358,83 @@ func TestTaskFailureEndpointsReturnFailuresAndRetryCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetByID(queue) error = %v", err)
 	}
-	if got, want := queueItem.Status, "pending"; got != want {
+	if got, want := queueItem.Status, "queued"; got != want {
 		t.Fatalf("queue status = %q, want %q", got, want)
+	}
+}
+
+func TestTaskConflictEndpointReturnsConflictHistory(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlitestore.Open(testdb.Path(t))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	if err := sqlitestore.Migrate(context.Background(), db); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	secrets, err := crypto.NewSecretManager("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("NewSecretManager() error = %v", err)
+	}
+	connectionService, err := app.NewConnectionService(sqlitestore.NewConnectionRepository(db), secrets)
+	if err != nil {
+		t.Fatalf("NewConnectionService() error = %v", err)
+	}
+	taskService := app.NewTaskService(sqlitestore.NewTaskRepository(db))
+	taskService.SetConflictHistoryRepository(sqlitestore.NewConflictHistoryRepository(db))
+	router := api.NewRouter(connectionService, taskService)
+
+	now := time.Now().UTC()
+	if err := sqlitestore.NewConnectionRepository(db).Create(context.Background(), domain.Connection{
+		ID:                 "conn-1",
+		Name:               "primary",
+		Endpoint:           "https://dav.example.com/root",
+		Username:           "alice",
+		PasswordCiphertext: "cipher",
+		RootPath:           "/",
+		TLSMode:            domain.TLSModeStrict,
+		TimeoutSec:         30,
+		Status:             "active",
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}); err != nil {
+		t.Fatalf("Create(connection) error = %v", err)
+	}
+	if err := sqlitestore.NewTaskRepository(db).Create(context.Background(), domain.Task{
+		ID:           "task-1",
+		Name:         "sync-home",
+		ConnectionID: "conn-1",
+		LocalPath:    "/tmp/local",
+		RemotePath:   "/remote",
+		Direction:    domain.TaskDirectionBidirectional,
+		Status:       domain.TaskStatusRunning,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("Create(task) error = %v", err)
+	}
+	if err := sqlitestore.NewConflictHistoryRepository(db).Create(context.Background(), domain.ConflictRecord{
+		ID:                 "conflict-1",
+		TaskID:             "task-1",
+		RelativePath:       "docs/report.txt",
+		LocalConflictPath:  "docs/report (local copy).txt",
+		RemoteConflictPath: "docs/report (remote copy).txt",
+		Policy:             "keep_both",
+		DetectedAt:         now,
+	}); err != nil {
+		t.Fatalf("Create(conflict) error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/tasks/task-1/conflicts", nil))
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("conflicts status = %d, want %d", got, want)
+	}
+	if !bytes.Contains(recorder.Body.Bytes(), []byte(`"relative_path":"docs/report.txt"`)) {
+		t.Fatalf("conflicts body = %s, want relative_path payload", recorder.Body.String())
 	}
 }
 
@@ -524,7 +599,7 @@ func TestTaskRuntimeEndpointReturnsAggregatedView(t *testing.T) {
 		ID:        "op-1",
 		TaskID:    "task-1",
 		OpType:    "UploadFile",
-		Status:    "pending",
+		Status:    "queued",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}); err != nil {
@@ -559,9 +634,184 @@ func TestTaskRuntimeEndpointReturnsAggregatedView(t *testing.T) {
 	if got, want := int(queueSummary["total"].(float64)), 1; got != want {
 		t.Fatalf("queue_summary.total = %d, want %d", got, want)
 	}
+	if got, want := int(queueSummary["queued"].(float64)), 1; got != want {
+		t.Fatalf("queue_summary.queued = %d, want %d", got, want)
+	}
 	failureSummary := payload["failure_summary"].(map[string]any)
 	if got, want := int(failureSummary["open"].(float64)), 1; got != want {
 		t.Fatalf("failure_summary.open = %d, want %d", got, want)
+	}
+}
+
+func TestMetricsEndpointReturnsAggregatedMetrics(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlitestore.Open(testdb.Path(t))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	if err := sqlitestore.Migrate(context.Background(), db); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	secrets, err := crypto.NewSecretManager("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("NewSecretManager() error = %v", err)
+	}
+	connectionService, err := app.NewConnectionService(sqlitestore.NewConnectionRepository(db), secrets)
+	if err != nil {
+		t.Fatalf("NewConnectionService() error = %v", err)
+	}
+	taskService := app.NewTaskService(sqlitestore.NewTaskRepository(db))
+	taskService.SetFailureRepository(sqlitestore.NewFailureRecordRepository(db))
+	taskService.SetOperationQueueRepository(sqlitestore.NewOperationQueueRepository(db))
+	router := api.NewRouter(connectionService, taskService)
+
+	now := time.Now().UTC()
+	if err := sqlitestore.NewConnectionRepository(db).Create(context.Background(), domain.Connection{
+		ID:                 "conn-1",
+		Name:               "primary",
+		Endpoint:           "https://dav.example.com/root",
+		Username:           "alice",
+		PasswordCiphertext: "cipher",
+		RootPath:           "/",
+		TLSMode:            domain.TLSModeStrict,
+		TimeoutSec:         30,
+		Status:             "active",
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}); err != nil {
+		t.Fatalf("Create(connection) error = %v", err)
+	}
+	taskRepo := sqlitestore.NewTaskRepository(db)
+	for _, task := range []domain.Task{
+		{ID: "task-1", Name: "sync-1", ConnectionID: "conn-1", LocalPath: "/tmp/1", RemotePath: "/remote/1", Direction: domain.TaskDirectionUpload, Status: domain.TaskStatusRunning, CreatedAt: now, UpdatedAt: now},
+		{ID: "task-2", Name: "sync-2", ConnectionID: "conn-1", LocalPath: "/tmp/2", RemotePath: "/remote/2", Direction: domain.TaskDirectionDownload, Status: domain.TaskStatusDegraded, CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := taskRepo.Create(context.Background(), task); err != nil {
+			t.Fatalf("Create(task) error = %v", err)
+		}
+	}
+	queueRepo := sqlitestore.NewOperationQueueRepository(db)
+	for _, item := range []domain.OperationQueueItem{
+		{ID: "op-1", TaskID: "task-1", OpType: "UploadFile", Status: "queued", CreatedAt: now, UpdatedAt: now},
+		{ID: "op-2", TaskID: "task-2", OpType: "DownloadFile", Status: "retry_wait", CreatedAt: now, UpdatedAt: now},
+	} {
+		if err := queueRepo.Enqueue(context.Background(), item); err != nil {
+			t.Fatalf("Enqueue(queue) error = %v", err)
+		}
+	}
+	failureRepo := sqlitestore.NewFailureRecordRepository(db)
+	for _, record := range []domain.FailureRecord{
+		{ID: "fail-1", TaskID: "task-1", Path: "a.txt", OpType: "UploadFile", Retryable: true, FirstFailedAt: now, LastFailedAt: now, AttemptCount: 1},
+		{ID: "fail-2", TaskID: "task-2", Path: "b.txt", OpType: "DownloadFile", Retryable: false, FirstFailedAt: now, LastFailedAt: now, AttemptCount: 1, ResolvedAt: now},
+	} {
+		if err := failureRepo.Create(context.Background(), record); err != nil {
+			t.Fatalf("Create(failure) error = %v", err)
+		}
+	}
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/metrics", nil))
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("metrics status = %d, want %d", got, want)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	taskStates := payload["task_states"].(map[string]any)
+	if got, want := int(taskStates["running"].(float64)), 1; got != want {
+		t.Fatalf("task_states.running = %d, want %d", got, want)
+	}
+	queue := payload["queue"].(map[string]any)
+	if got, want := int(queue["retry_wait"].(float64)), 1; got != want {
+		t.Fatalf("queue.retry_wait = %d, want %d", got, want)
+	}
+	failures := payload["failures"].(map[string]any)
+	if got, want := int(failures["retryable_open"].(float64)), 1; got != want {
+		t.Fatalf("failures.retryable_open = %d, want %d", got, want)
+	}
+}
+
+func TestTaskEventsEndpointReturnsTimeline(t *testing.T) {
+	t.Parallel()
+
+	db, err := sqlitestore.Open(testdb.Path(t))
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	defer db.Close()
+	if err := sqlitestore.Migrate(context.Background(), db); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+
+	secrets, err := crypto.NewSecretManager("0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatalf("NewSecretManager() error = %v", err)
+	}
+	connectionService, err := app.NewConnectionService(sqlitestore.NewConnectionRepository(db), secrets)
+	if err != nil {
+		t.Fatalf("NewConnectionService() error = %v", err)
+	}
+	taskService := app.NewTaskService(sqlitestore.NewTaskRepository(db))
+	taskService.SetEventRepository(sqlitestore.NewTaskEventRepository(db))
+	router := api.NewRouter(connectionService, taskService)
+
+	now := time.Now().UTC()
+	if err := sqlitestore.NewConnectionRepository(db).Create(context.Background(), domain.Connection{
+		ID:                 "conn-1",
+		Name:               "primary",
+		Endpoint:           "https://dav.example.com/root",
+		Username:           "alice",
+		PasswordCiphertext: "cipher",
+		RootPath:           "/",
+		TLSMode:            domain.TLSModeStrict,
+		TimeoutSec:         30,
+		Status:             "active",
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}); err != nil {
+		t.Fatalf("Create(connection) error = %v", err)
+	}
+	if err := sqlitestore.NewTaskRepository(db).Create(context.Background(), domain.Task{
+		ID:           "task-1",
+		Name:         "sync-home",
+		ConnectionID: "conn-1",
+		LocalPath:    "/tmp/local",
+		RemotePath:   "/remote",
+		Direction:    domain.TaskDirectionUpload,
+		Status:       domain.TaskStatusRunning,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}); err != nil {
+		t.Fatalf("Create(task) error = %v", err)
+	}
+	if err := sqlitestore.NewTaskEventRepository(db).Create(context.Background(), domain.TaskEvent{
+		ID:        "event-1",
+		TaskID:    "task-1",
+		EventType: "task_started",
+		Level:     "info",
+		Message:   "task started",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("Create(event) error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/tasks/task-1/events", nil))
+	if got, want := recorder.Code, http.StatusOK; got != want {
+		t.Fatalf("events status = %d, want %d", got, want)
+	}
+
+	var payload []map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if len(payload) != 1 || payload[0]["event_type"] != "task_started" {
+		t.Fatalf("payload = %+v, want task_started event", payload)
 	}
 }
 

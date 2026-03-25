@@ -63,6 +63,7 @@ var migrations = []string{
 		backoff_until TEXT NOT NULL DEFAULT '',
 		retry_streak INTEGER NOT NULL DEFAULT 0,
 		last_error TEXT NOT NULL DEFAULT '',
+		checkpoint_json TEXT NOT NULL DEFAULT '',
 		updated_at TEXT NOT NULL,
 		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 	);
@@ -127,6 +128,30 @@ var migrations = []string{
 		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 	);
 	`,
+	`
+	CREATE TABLE IF NOT EXISTS conflict_history (
+		id TEXT PRIMARY KEY,
+		task_id TEXT NOT NULL,
+		relative_path TEXT NOT NULL,
+		local_conflict_path TEXT NOT NULL DEFAULT '',
+		remote_conflict_path TEXT NOT NULL DEFAULT '',
+		policy TEXT NOT NULL DEFAULT '',
+		detected_at TEXT NOT NULL,
+		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+	);
+	`,
+	`
+	CREATE TABLE IF NOT EXISTS task_events (
+		id TEXT PRIMARY KEY,
+		task_id TEXT NOT NULL,
+		event_type TEXT NOT NULL,
+		level TEXT NOT NULL DEFAULT 'info',
+		message TEXT NOT NULL DEFAULT '',
+		details_json TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+	);
+	`,
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error {
@@ -149,6 +174,18 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 	}
 	if !exists {
 		if _, err := tx.ExecContext(ctx, `ALTER TABLE connections ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT ''`); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	exists, err = columnExists(ctx, tx, "task_runtime_state", "checkpoint_json")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if !exists {
+		if _, err := tx.ExecContext(ctx, `ALTER TABLE task_runtime_state ADD COLUMN checkpoint_json TEXT NOT NULL DEFAULT ''`); err != nil {
 			tx.Rollback()
 			return err
 		}

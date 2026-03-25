@@ -58,6 +58,7 @@ func TestTaskRuntimeRepositoryUpsertAndGet(t *testing.T) {
 		Phase:           "running",
 		LastLocalScanAt: time.Date(2026, 3, 24, 10, 1, 0, 0, time.UTC),
 		LastSuccessAt:   time.Date(2026, 3, 24, 10, 2, 0, 0, time.UTC),
+		CheckpointJSON:  `{"remote":{"cursor":"etag-1"}}`,
 		RetryStreak:     1,
 		LastError:       "temporary",
 		UpdatedAt:       time.Date(2026, 3, 24, 10, 3, 0, 0, time.UTC),
@@ -75,6 +76,9 @@ func TestTaskRuntimeRepositoryUpsertAndGet(t *testing.T) {
 	}
 	if !got.LastSuccessAt.Equal(input.LastSuccessAt) {
 		t.Fatalf("LastSuccessAt = %v, want %v", got.LastSuccessAt, input.LastSuccessAt)
+	}
+	if got.CheckpointJSON != input.CheckpointJSON {
+		t.Fatalf("CheckpointJSON = %q, want %q", got.CheckpointJSON, input.CheckpointJSON)
 	}
 }
 

@@ -32,6 +32,11 @@ type Watcher struct {
 	watched         map[string]string
 	roots           map[string]domain.Task
 	lastTriggered   map[string]time.Time
+	logger          watcherLogger
+}
+
+type watcherLogger interface {
+	Printf(string, ...any)
 }
 
 func New(tasks taskRunner, refreshInterval, debounce time.Duration) *Watcher {
@@ -44,6 +49,10 @@ func New(tasks taskRunner, refreshInterval, debounce time.Duration) *Watcher {
 		roots:           make(map[string]domain.Task),
 		lastTriggered:   make(map[string]time.Time),
 	}
+}
+
+func (w *Watcher) SetLogger(logger watcherLogger) {
+	w.logger = logger
 }
 
 func (w *Watcher) SetBackendFactory(factory func() (Backend, error)) {
@@ -98,6 +107,7 @@ func (w *Watcher) reconcile(ctx context.Context, backend Backend) {
 				continue
 			}
 			w.watched[dir] = task.ID
+			w.logf("watcher add path task_id=%s path=%s", task.ID, dir)
 		}
 	}
 
@@ -106,6 +116,7 @@ func (w *Watcher) reconcile(ctx context.Context, backend Backend) {
 			continue
 		}
 		_ = backend.Remove(watchedPath)
+		w.logf("watcher remove path task_id=%s path=%s", w.watched[watchedPath], watchedPath)
 		delete(w.watched, watchedPath)
 	}
 
@@ -124,7 +135,14 @@ func (w *Watcher) handleEvent(ctx context.Context, path string) {
 			continue
 		}
 		w.lastTriggered[task.ID] = now
+		w.logf("watcher trigger task_id=%s path=%s", task.ID, cleanPath)
 		_ = w.tasks.ExecuteRunningTask(ctx, task.ID)
+	}
+}
+
+func (w *Watcher) logf(format string, args ...any) {
+	if w.logger != nil {
+		w.logger.Printf(format, args...)
 	}
 }
 
